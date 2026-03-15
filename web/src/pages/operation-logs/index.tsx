@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Row, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Card, Col, Row, Select, Table, Tag, Typography } from 'antd';
 import { HistoryOutlined, ReloadOutlined, ThunderboltOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { logsApi } from '../../api';
@@ -8,7 +8,7 @@ import { LOG_ACTION_OPTIONS, getLogActionColor, getLogActionLabel } from '../../
 import type { LogAction } from '../../constants/logActions';
 import { requestData } from '../../utils/request';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface LogItem {
     id: number;
@@ -65,20 +65,6 @@ const OperationLogsPage: React.FC = () => {
             return 0;
         }
         return Math.round(logs.reduce((sum, item) => sum + item.responseTimeMs, 0) / logs.length);
-    }, [logs]);
-
-    const uniqueApiKeys = useMemo(
-        () => new Set(logs.map((item) => item.apiKeyName).filter((value) => value && value !== '-')).size,
-        [logs]
-    );
-
-    const dominantAction = useMemo(() => {
-        const counts = new Map<string, number>();
-        for (const item of logs) {
-            counts.set(item.action, (counts.get(item.action) || 0) + 1);
-        }
-        const topAction = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-        return topAction ? getLogActionLabel(topAction[0]) : '暂无';
     }, [logs]);
 
     const columns = useMemo(() => [
@@ -187,61 +173,9 @@ const OperationLogsPage: React.FC = () => {
     return (
         <div className="gx-ops-shell">
             <PageHeader
-                eyebrow="Audit Trail"
                 title="API 调用日志"
-                subtitle="把外部调用轨迹、状态码表现和耗时波动压到一个更适合审计与排障的控制台视图里。"
                 extra={<Button icon={<ReloadOutlined />} onClick={fetchLogs}>刷新</Button>}
             />
-
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Trace Console</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            审计事件、耗时信号和异常比例集中查看。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这个页面现在优先服务排障和追踪。你可以快速判断当前页调用是否健康、哪个动作最活跃、哪些请求值得下钻查看。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button type="primary" icon={<HistoryOutlined />} onClick={fetchLogs}>刷新审计</Button>
-                            {actionFilter && (
-                                <Button
-                                    onClick={() => {
-                                        setActionFilter(undefined);
-                                        setPage(1);
-                                    }}
-                                >
-                                    清空筛选
-                                </Button>
-                            )}
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Current Page Success Rate</Text>
-                                <Text className="gx-hero-signal__value">
-                                    {logs.length > 0 ? Math.round((successCount / logs.length) * 100) : 0}%
-                                </Text>
-                                <Text className="gx-hero-signal__description">
-                                    当前页成功 {successCount} 条，异常 {errorCount} 条，主导动作为 {dominantAction}。
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">平均耗时</Text>
-                                    <Text className="gx-hero-mini__value">{averageResponseTime}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">活跃 Key</Text>
-                                    <Text className="gx-hero-mini__value">{uniqueApiKeys}</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
 
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
@@ -272,9 +206,7 @@ const OperationLogsPage: React.FC = () => {
                                 setPage(1);
                             }}
                         />
-                        <Text type="secondary">
-                            仅记录通过 API Key 发起的外部调用，用于审计分配、拉信和邮箱池操作。
-                        </Text>
+                        <Text type="secondary">仅展示外部 API 调用，便于按操作类型回看排障。</Text>
                     </div>
                     <div className="gx-ops-toolbar__cluster gx-ops-toolbar__cluster--actions">
                         {actionFilter && (

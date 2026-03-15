@@ -6,9 +6,7 @@ import {
     Avatar,
     Dropdown,
     Typography,
-    Breadcrumb,
     Button,
-    Tag,
     Drawer,
     Grid,
 } from 'antd';
@@ -24,25 +22,25 @@ import {
     MenuUnfoldOutlined,
     FileTextOutlined,
     HistoryOutlined,
-    SafetyCertificateOutlined,
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import { useAuthStore } from '../stores/authStore';
 import { authApi } from '../api';
 import { isSuperAdmin } from '../utils/auth';
+import { ThemeModeToggle } from '../components';
+import { useThemeMode } from '../theme';
 
 const { Header, Sider, Content } = Layout;
 const { Text, Title } = Typography;
 const { useBreakpoint } = Grid;
 
 const menuConfig = [
-    { key: '/dashboard', icon: <DashboardOutlined />, title: '数据概览', description: '总览邮箱池、调用活跃度和系统健康度' },
-    { key: '/emails', icon: <MailOutlined />, title: '邮箱管理', description: '维护邮箱池、分组策略和收信操作' },
-    { key: '/api-keys', icon: <KeyOutlined />, title: 'API Key 管理', description: '控制权限边界、速率限制和池分配' },
-    { key: '/api-docs', icon: <FileTextOutlined />, title: 'API 文档', description: '查看接口用法、调用示例和参数说明' },
-    { key: '/operation-logs', icon: <HistoryOutlined />, title: '操作日志', description: '审计分配、拉信和清理行为的执行轨迹' },
-    { key: '/admins', icon: <UserOutlined />, title: '管理员管理', description: '管理后台账号与角色边界', superAdmin: true },
-    { key: '/settings', icon: <SettingOutlined />, title: '系统设置', description: '维护个人安全设置和二次验证' },
+    { key: '/dashboard', icon: <DashboardOutlined />, title: '数据概览' },
+    { key: '/emails', icon: <MailOutlined />, title: '邮箱管理' },
+    { key: '/api-keys', icon: <KeyOutlined />, title: 'API Key 管理' },
+    { key: '/api-docs', icon: <FileTextOutlined />, title: 'API 文档' },
+    { key: '/operation-logs', icon: <HistoryOutlined />, title: '操作日志' },
+    { key: '/admins', icon: <UserOutlined />, title: '管理员管理', superAdmin: true },
+    { key: '/settings', icon: <SettingOutlined />, title: '系统设置' },
 ];
 
 const MainLayout: React.FC = () => {
@@ -51,6 +49,7 @@ const MainLayout: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { admin, clearAuth } = useAuthStore();
+    const { isDark } = useThemeMode();
     const screens = useBreakpoint();
 
     const hasSuperAdminPermission = isSuperAdmin(admin?.role);
@@ -68,7 +67,7 @@ const MainLayout: React.FC = () => {
     );
 
     const selectedKeys = currentMenu ? [currentMenu.key] : [];
-    const sidebarOffset = isMobile ? 0 : (collapsed ? 128 : 312);
+    const sidebarOffset = isMobile ? 0 : (collapsed ? 108 : 268);
 
     const handleLogout = async () => {
         try {
@@ -107,14 +106,7 @@ const MainLayout: React.FC = () => {
     const menuItems: MenuProps['items'] = availableMenu.map((item) => ({
         key: item.key,
         icon: item.icon,
-        label: (
-            <div className="gx-shell__menu-copy">
-                <span className="gx-shell__menu-label">{item.title}</span>
-                {(!collapsed || isMobile) && (
-                    <span className="gx-shell__menu-hint">{item.description}</span>
-                )}
-            </div>
-        ),
+        label: <span className="gx-shell__menu-label">{item.title}</span>,
     }));
 
     const navigationContent = (
@@ -124,41 +116,18 @@ const MainLayout: React.FC = () => {
                 {(!collapsed || isMobile) && (
                     <div className="gx-shell__brand-copy">
                         <Title level={5} className="gx-shell__brand-title">GongXi Mail</Title>
-                        <Text className="gx-shell__brand-subtitle">Secure mail operations console</Text>
                     </div>
                 )}
             </div>
 
-            {(!collapsed || isMobile) && (
-                <div className="gx-shell__status-card">
-                    <Text className="gx-shell__status-label">Command Layer</Text>
-                    <Text className="gx-shell__status-value">
-                        聚合邮箱池、API 调度和审计日志，适合高频运营和故障排查。
-                    </Text>
-                    <div className="gx-shell__status-meta">
-                        <Tag color="cyan">2FA Ready</Tag>
-                        <Tag color="green">Traceable</Tag>
-                    </div>
-                </div>
-            )}
-
             <Menu
                 className="gx-shell__menu"
-                theme="dark"
+                theme={isDark ? 'dark' : 'light'}
                 mode="inline"
                 selectedKeys={selectedKeys}
                 items={menuItems}
                 onClick={handleMenuClick}
             />
-
-            {(!collapsed || isMobile) && (
-                <div className="gx-shell__footer-note">
-                    <Text className="gx-shell__footer-note-label">Ops Signal</Text>
-                    <Text className="gx-shell__footer-note-text">
-                        当前会话已进入受保护后台，建议保持二次验证开启。
-                    </Text>
-                </div>
-            )}
         </div>
     );
 
@@ -170,9 +139,9 @@ const MainLayout: React.FC = () => {
                     trigger={null}
                     collapsible
                     collapsed={collapsed}
-                    width={280}
-                    collapsedWidth={96}
-                    theme="dark"
+                    width={236}
+                    collapsedWidth={76}
+                    theme={isDark ? 'dark' : 'light'}
                 >
                     {navigationContent}
                 </Sider>
@@ -205,37 +174,21 @@ const MainLayout: React.FC = () => {
                             }}
                             aria-label="切换导航"
                         />
-                        <div className="gx-shell__header-copy">
-                            <Breadcrumb
-                                className="gx-shell__header-breadcrumb"
-                                items={[
-                                    { title: '控制台' },
-                                    { title: currentMenu?.title || '管理后台' },
-                                ]}
-                            />
-                            <Text className="gx-shell__header-note">
-                                {currentMenu?.description || '统一管理邮箱资源、API 权限和操作轨迹。'}
-                            </Text>
-                        </div>
                     </div>
 
                     <div className="gx-shell__header-right">
-                        <div className="gx-shell__header-chip">
-                            <Text className="gx-shell__header-chip-label">Session</Text>
-                            <Text className="gx-shell__header-chip-value">{dayjs().format('YYYY/MM/DD')}</Text>
-                        </div>
+                        <ThemeModeToggle compact={isMobile} />
                         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
                             <button type="button" className="gx-shell__profile">
-                                <Avatar size={40} style={{ backgroundColor: '#0369A1' }}>
+                                <Avatar size={40} style={{ backgroundColor: 'var(--gx-primary-strong)' }}>
                                     {avatarText}
                                 </Avatar>
                                 <div className="gx-shell__profile-copy">
                                     <Text className="gx-shell__profile-name">{displayName}</Text>
                                     <Text className="gx-shell__profile-role">
-                                        {hasSuperAdminPermission ? 'SUPER ADMIN' : 'ADMIN OPERATOR'}
+                                        {hasSuperAdminPermission ? '超级管理员' : '管理员'}
                                     </Text>
                                 </div>
-                                <SafetyCertificateOutlined style={{ color: '#0369A1' }} />
                             </button>
                         </Dropdown>
                     </div>

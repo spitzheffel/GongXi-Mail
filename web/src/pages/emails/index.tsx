@@ -40,7 +40,7 @@ import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
 import { requestData } from '../../utils/request';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
 const { Dragger } = Upload;
 
@@ -664,15 +664,10 @@ const EmailsPage: React.FC = () => {
         () => data.filter((item) => item.status === 'ERROR').length,
         [data]
     );
-    const currentPageCheckedCount = useMemo(
-        () => data.filter((item) => Boolean(item.lastCheckAt)).length,
-        [data]
-    );
     const currentPageDisabledCount = useMemo(
         () => data.filter((item) => item.status === 'DISABLED').length,
         [data]
     );
-    const groupCoverage = total > 0 ? Math.round((groupedTotal / total) * 100) : 0;
     const strategyCount = useMemo(
         () => new Set(groups.map((group) => group.fetchStrategy)).size,
         [groups]
@@ -919,50 +914,9 @@ const EmailsPage: React.FC = () => {
     return (
         <div className="gx-ops-shell">
             <PageHeader
-                eyebrow="Mailbox Operations"
                 title="邮箱管理"
-                subtitle="把账号维护、分组策略、批量导入和收件箱查看折叠到一个更适合高频运营的控制台里。"
                 extra={<Button icon={<ReloadOutlined />} onClick={refreshOverview}>刷新数据</Button>}
             />
-
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Mailbox Console</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            分组调度、批量导入和邮箱排查收敛到同一页。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这页现在更偏向操作控制台而不是传统列表页。筛选、批量动作、分组编排和邮件查看保持在一个连续上下文里，减少运维切换成本。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>添加邮箱</Button>
-                            <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>批量导入</Button>
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Group Coverage</Text>
-                                <Text className="gx-hero-signal__value">{groupCoverage}%</Text>
-                                <Text className="gx-hero-signal__description">
-                                    {groupedTotal} 个邮箱已经进入分组策略，剩余 {ungroupedTotal} 个仍可继续整理编排。
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">当前页已检查</Text>
-                                    <Text className="gx-hero-mini__value">{currentPageCheckedCount}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">当前页异常</Text>
-                                    <Text className="gx-hero-mini__value">{currentPageErrorCount}</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
 
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
@@ -975,7 +929,7 @@ const EmailsPage: React.FC = () => {
                     <StatCard title="分组数量" value={groups.length} icon={<InboxOutlined />} iconBgColor="#0EA5E9" />
                 </Col>
                 <Col xs={12} md={6}>
-                    <StatCard title="当前选择" value={selectedRowKeys.length} icon={<SyncOutlined />} iconBgColor="#f59e0b" />
+                    <StatCard title="当前页异常" value={currentPageErrorCount} icon={<SyncOutlined />} iconBgColor="#f59e0b" />
                 </Col>
             </Row>
 

@@ -1,4 +1,4 @@
-import React, { type CSSProperties } from 'react';
+import React from 'react';
 import { Card, Space, Typography } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
@@ -25,10 +25,6 @@ const StatCard: React.FC<StatCardProps> = ({
     suffix,
     loading = false,
 }) => {
-    const cardStyle = {
-        '--gx-stat-accent': iconBgColor,
-    } as CSSProperties;
-
     const renderTrend = () => {
         if (trend === undefined) return null;
 
@@ -56,7 +52,6 @@ const StatCard: React.FC<StatCardProps> = ({
             className="gx-stat-card"
             bordered={false}
             loading={loading}
-            style={cardStyle}
             styles={{ body: { padding: '20px 24px' } }}
         >
             <div className="gx-stat-card__inner">

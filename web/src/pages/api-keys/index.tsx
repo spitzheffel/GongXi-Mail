@@ -39,7 +39,7 @@ import { requestData } from '../../utils/request';
 import { LOG_ACTION_OPTIONS } from '../../constants/logActions';
 import dayjs from 'dayjs';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 interface EmailGroup {
     id: number;
@@ -635,24 +635,15 @@ const ApiKeysPage: React.FC = () => {
         [data]
     );
 
-    const currentPageUsage = useMemo(
-        () => data.reduce((sum, item) => sum + (item.usageCount || 0), 0),
-        [data]
-    );
-
     const neverUsedCount = useMemo(
         () => data.filter((item) => !item.lastUsedAt).length,
         [data]
     );
 
-    const enabledRate = data.length > 0 ? Math.round((activeKeysOnPage / data.length) * 100) : 0;
-
     return (
         <div>
             <PageHeader
-                eyebrow="Access Control"
                 title="API Key 管理"
-                subtitle="把权限边界、速率限制、邮箱池占用和白名单范围放进更聚焦的控制台视图里，便于快速判断风险和容量。"
                 extra={(
                     <>
                         <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
@@ -660,45 +651,6 @@ const ApiKeysPage: React.FC = () => {
                     </>
                 )}
             />
-
-            <Card className="gx-hero-card gx-panel-card" bordered={false} style={{ marginBottom: 16 }}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Permission Console</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            权限范围、速率上限和邮箱池使用情况集中查看。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这个页面现在优先暴露密钥的控制语义而不是单纯列表。你可以更快判断哪些 Key 需要收紧权限、哪些池子接近耗尽，以及哪些配置仍未实际使用。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>新建 Key</Button>
-                            <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新列表</Button>
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Current Page Enable Rate</Text>
-                                <Text className="gx-hero-signal__value">{enabledRate}%</Text>
-                                <Text className="gx-hero-signal__description">
-                                    当前页启用 {activeKeysOnPage} 个 Key，未使用 {neverUsedCount} 个，适合优先排查闲置或过宽授权。
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">当前页调用量</Text>
-                                    <Text className="gx-hero-mini__value">{currentPageUsage}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">即将到期</Text>
-                                    <Text className="gx-hero-mini__value">{expiringSoonCount}</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
 
             <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                 <Col xs={12} md={6}>
@@ -708,10 +660,10 @@ const ApiKeysPage: React.FC = () => {
                     <StatCard title="当前页启用" value={activeKeysOnPage} suffix={`/ ${data.length || 0}`} icon={<ReloadOutlined />} iconBgColor="#0F766E" />
                 </Col>
                 <Col xs={12} md={6}>
-                    <StatCard title="活跃邮箱范围" value={allEmailOptions.length} icon={<DatabaseOutlined />} iconBgColor="#0EA5E9" />
+                    <StatCard title="7 天内到期" value={expiringSoonCount} icon={<DatabaseOutlined />} iconBgColor="#0EA5E9" />
                 </Col>
                 <Col xs={12} md={6}>
-                    <StatCard title="分组白名单" value={groups.length} icon={<SearchOutlined />} iconBgColor="#f59e0b" />
+                    <StatCard title="从未调用" value={neverUsedCount} icon={<SearchOutlined />} iconBgColor="#f59e0b" />
                 </Col>
             </Row>
 

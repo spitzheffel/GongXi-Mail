@@ -35,7 +35,7 @@ import { getAdminRoleLabel, getAdminStatusLabel, isSuperAdmin, normalizeAdminSta
 import { getErrorMessage } from '../../utils/error';
 import { requestData } from '../../utils/request';
 
-const { Paragraph, Text, Title } = Typography;
+const { Text } = Typography;
 
 interface Admin {
     id: number;
@@ -110,23 +110,6 @@ const AdminsPage: React.FC = () => {
         () => data.filter((item) => item.twoFactorEnabled).length,
         [data]
     );
-
-    const superAdminCount = useMemo(
-        () => data.filter((item) => isSuperAdmin(item.role)).length,
-        [data]
-    );
-
-    const recentLoginCount = useMemo(
-        () => data.filter((item) => item.lastLoginAt && dayjs(item.lastLoginAt).isAfter(dayjs().subtract(7, 'day'))).length,
-        [data]
-    );
-
-    const securityCoverage = useMemo(() => {
-        if (data.length === 0) {
-            return 0;
-        }
-        return Math.round((twoFactorEnabledCount / data.length) * 100);
-    }, [data.length, twoFactorEnabledCount]);
 
     const handleCreate = useCallback(() => {
         setEditingId(null);
@@ -311,9 +294,7 @@ const AdminsPage: React.FC = () => {
     return (
         <div className="gx-ops-shell">
             <PageHeader
-                eyebrow="Security Console"
                 title="管理员管理"
-                subtitle="集中查看管理员账号、角色边界、2FA 覆盖率和最近登录情况，方便做账号治理与风险排查。"
                 extra={(
                     <>
                         <Button icon={<ReloadOutlined />} onClick={() => void fetchData()}>
@@ -325,49 +306,6 @@ const AdminsPage: React.FC = () => {
                     </>
                 )}
             />
-
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Account Governance</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            管理员账号、登录状态和安全边界放到一个视图里统一处理。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这页现在更偏账号安全控制台。你可以快速判断当前页有多少账号启用了 2FA、哪些账号最近活跃、哪些账号处于停用状态，以及谁拥有超级管理员权限。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                                新建管理员
-                            </Button>
-                            <Button icon={<ReloadOutlined />} onClick={() => void fetchData()}>
-                                重新拉取
-                            </Button>
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Current Page 2FA Coverage</Text>
-                                <Text className="gx-hero-signal__value">{securityCoverage}%</Text>
-                                <Text className="gx-hero-signal__description">
-                                    当前页共有 {data.length} 个账号，其中 {twoFactorEnabledCount} 个已启用 2FA，{disabledAdmins} 个处于停用状态。
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">最近 7 天登录</Text>
-                                    <Text className="gx-hero-mini__value">{recentLoginCount}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">超级管理员</Text>
-                                    <Text className="gx-hero-mini__value">{superAdminCount}</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
 
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
@@ -386,7 +324,7 @@ const AdminsPage: React.FC = () => {
 
             <Card className="gx-panel-card gx-data-table" bordered={false}>
                 <div className="gx-ops-note" style={{ marginBottom: 18 }}>
-                    <Text className="gx-ops-note__label">Governance Rules</Text>
+                    <Text className="gx-ops-note__label">治理规则</Text>
                     <Text className="gx-ops-note__text">
                         超级管理员拥有账号治理能力，但不能在这里直接帮别人开启 2FA。2FA 的真正绑定需要管理员本人在“设置”页完成；当前账号也不会显示删除按钮，避免误删自身。
                     </Text>

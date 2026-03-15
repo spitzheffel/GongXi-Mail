@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Row, Col, Card, Table, Tag, Typography, Spin, Button, Space, Progress } from 'antd';
+import { Row, Col, Card, Table, Tag, Typography, Spin, Button } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     MailOutlined,
@@ -13,8 +13,9 @@ import {
 import dayjs from 'dayjs';
 import { StatCard, PageHeader } from '../../components';
 import { dashboardApi, emailApi, apiKeyApi } from '../../api';
+import { useThemeMode } from '../../theme';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text } = Typography;
 
 const LineChart = lazy(async () => {
     const mod = await import('@ant-design/charts');
@@ -61,6 +62,7 @@ interface ApiTrendItem {
 
 const DashboardPage: React.FC = () => {
     const navigate = useNavigate();
+    const { isDark } = useThemeMode();
     const [coreLoading, setCoreLoading] = useState(true);
     const [trendLoading, setTrendLoading] = useState(true);
     const [chartsReady, setChartsReady] = useState(false);
@@ -249,17 +251,43 @@ const DashboardPage: React.FC = () => {
         yField: 'count',
         smooth: true,
         height: 280,
-        point: { size: 4, shape: 'circle' },
-        color: '#0369A1',
+        point: {
+            size: 4,
+            shape: 'circle',
+            style: {
+                fill: isDark ? '#7DD3FC' : '#0369A1',
+                stroke: isDark ? '#08111D' : '#FFFFFF',
+                lineWidth: 2,
+            },
+        },
+        color: isDark ? '#7DD3FC' : '#0369A1',
         areaStyle: {
-            fill: 'l(270) 0:#ffffff 1:#0ea5e930',
+            fill: isDark
+                ? 'l(270) 0:rgba(125,211,252,0.28) 1:rgba(125,211,252,0.02)'
+                : 'l(270) 0:rgba(14,165,233,0.18) 1:rgba(14,165,233,0.02)',
         },
         xAxis: {
             label: {
                 formatter: (v: string) => dayjs(v).format('MM-DD'),
+                style: { fill: isDark ? '#94A3B8' : '#64748B' },
+            },
+            line: { style: { stroke: isDark ? 'rgba(148,163,184,0.14)' : 'rgba(15,23,42,0.08)' } },
+            tickLine: { style: { stroke: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.08)' } },
+        },
+        yAxis: {
+            label: {
+                style: { fill: isDark ? '#94A3B8' : '#64748B' },
+            },
+            grid: {
+                line: {
+                    style: {
+                        stroke: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.08)',
+                        lineDash: [4, 4],
+                    },
+                },
             },
         },
-    }), [apiTrend]);
+    }), [apiTrend, isDark]);
 
     const statsData: Stats = stats || {
         apiKeys: { total: 0, active: 0, totalUsage: 0, todayActive: 0 },
@@ -279,25 +307,40 @@ const DashboardPage: React.FC = () => {
         height: 280,
         radius: 0.8,
         innerRadius: 0.6,
-        color: ['#22c55e', '#ef4444', '#bae6fd'],
+        color: isDark ? ['#22c55e', '#f97316', '#7dd3fc'] : ['#16a34a', '#ef4444', '#93c5fd'],
         label: {
             type: 'inner',
             offset: '-50%',
             content: '{value}',
-            style: { textAlign: 'center', fontSize: 14 },
+            style: {
+                textAlign: 'center',
+                fontSize: 14,
+                fill: isDark ? '#E2E8F0' : '#0F172A',
+            },
+        },
+        legend: {
+            position: 'bottom',
+            itemName: {
+                style: {
+                    fill: isDark ? '#CBD5E1' : '#334155',
+                },
+            },
         },
         statistic: {
-            title: { content: '邮箱' },
-            content: { content: statsData.emails.total.toString() },
+            title: {
+                content: '邮箱',
+                style: {
+                    fill: isDark ? '#94A3B8' : '#64748B',
+                },
+            },
+            content: {
+                content: statsData.emails.total.toString(),
+                style: {
+                    fill: isDark ? '#F8FAFC' : '#0F172A',
+                },
+            },
         },
-    }), [pieData, statsData.emails.total]);
-
-    const mailboxHealth = statsData.emails.total > 0
-        ? Math.round((statsData.emails.active / statsData.emails.total) * 100)
-        : 0;
-    const apiKeyActivity = statsData.apiKeys.total > 0
-        ? Math.round((statsData.apiKeys.active / statsData.apiKeys.total) * 100)
-        : 0;
+    }), [isDark, pieData, statsData.emails.total]);
 
     const actionCards = [
         {
@@ -332,9 +375,7 @@ const DashboardPage: React.FC = () => {
     return (
         <div>
             <PageHeader
-                eyebrow="Operations Console"
                 title="数据概览"
-                subtitle="把邮箱池可用率、API 活跃度和审计趋势压缩到一个更聚焦的首页，让排障和运维判断更快。"
                 extra={(
                     <>
                         <Button onClick={() => navigate('/emails')}>邮箱池</Button>
@@ -342,48 +383,6 @@ const DashboardPage: React.FC = () => {
                     </>
                 )}
             />
-
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Command Overview</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            邮箱资源、API 调度与审计状态都在首屏。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这个首页现在更偏向控制台而不是普通后台列表页。关键判断点被前置：健康度、活跃度、分布趋势和最近变更一眼可读。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button type="primary" icon={<MailOutlined />} onClick={() => navigate('/emails')}>管理邮箱池</Button>
-                            <Button icon={<KeyOutlined />} onClick={() => navigate('/api-keys')}>管理 API Key</Button>
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Mailbox Health</Text>
-                                <Text className="gx-hero-signal__value">{mailboxHealth}%</Text>
-                                <Progress percent={mailboxHealth} showInfo={false} strokeColor="#22c55e" trailColor="#d7eff9" />
-                                <Text className="gx-hero-signal__description">
-                                    {statsData.emails.error > 0
-                                        ? `当前有 ${statsData.emails.error} 个异常邮箱需要优先处理。`
-                                        : '当前没有异常邮箱，邮箱池处于稳定状态。'}
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">今日活跃 Key</Text>
-                                    <Text className="gx-hero-mini__value">{statsData.apiKeys.todayActive}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">Key 活跃率</Text>
-                                    <Text className="gx-hero-mini__value">{apiKeyActivity}%</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
 
             <Row gutter={[16, 16]}>
                 <Col xs={12} sm={12} md={6}>
@@ -400,7 +399,7 @@ const DashboardPage: React.FC = () => {
                         value={statsData.emails.active}
                         icon={<CheckCircleOutlined />}
                         iconBgColor="#22C55E"
-                        suffix={`/ ${statsData.emails.total}`}
+                        suffix={`/ ${statsData.emails.total || 0}`}
                     />
                 </Col>
                 <Col xs={12} sm={12} md={6}>
@@ -417,7 +416,7 @@ const DashboardPage: React.FC = () => {
                         value={statsData.apiKeys.active}
                         icon={<KeyOutlined />}
                         iconBgColor="#0F766E"
-                        suffix={`/ ${statsData.apiKeys.total}`}
+                        suffix={`/ ${statsData.apiKeys.total || 0}`}
                     />
                 </Col>
             </Row>
@@ -435,7 +434,7 @@ const DashboardPage: React.FC = () => {
                                         <Text className="gx-action-card__meta-label">{item.metricLabel}</Text>
                                         <Text className="gx-action-card__meta-value">{item.metricValue}</Text>
                                     </div>
-                                    <ArrowRightOutlined style={{ color: '#0369A1' }} />
+                                    <ArrowRightOutlined style={{ color: 'var(--gx-primary)' }} />
                                 </div>
                             </Card>
                         </Link>

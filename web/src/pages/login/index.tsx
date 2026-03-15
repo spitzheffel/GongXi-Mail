@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Form, Input, Button, Card, Typography, message, Modal, Space } from 'antd';
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { authApi } from '../../api';
+import { ThemeModeToggle } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { getErrorMessage } from '../../utils/error';
 
@@ -83,65 +84,46 @@ const LoginPage: React.FC = () => {
 
     return (
         <div className="gx-login">
+            <div className="gx-login__controls">
+                <ThemeModeToggle />
+            </div>
             <div className="gx-login__shell">
-                <section className="gx-login__hero">
-                    <div>
-                        <div className="gx-login__brand">
-                            <div className="gx-login__brand-mark">GX</div>
-                            <div>
-                                <Text className="gx-login__brand-title">GongXi Mail</Text>
-                                <Text className="gx-login__brand-subtitle">Secure mail operations console</Text>
-                            </div>
-                        </div>
-
-                        <div style={{ marginTop: 34 }}>
-                            <Text className="gx-login__eyebrow">Operations Entry</Text>
-                            <Title level={1} className="gx-login__title">
-                                把邮箱调度、API 调用和审计行为收束到一套后台操作流里。
-                            </Title>
-                            <Text className="gx-login__subtitle">
-                                适合高频拉信、验证码邮箱分配和权限受控的运营场景。这个入口现在更像一个运维控制台，而不是默认后台登录框。
-                            </Text>
-                        </div>
-
-                        <div className="gx-login__feature-grid">
-                            <div className="gx-login__feature">
-                                <Text className="gx-login__feature-label">Security</Text>
-                                <Text className="gx-login__feature-value">2FA</Text>
-                                <Text className="gx-login__feature-desc">支持二次验证与后台账号保护。</Text>
-                            </div>
-                            <div className="gx-login__feature">
-                                <Text className="gx-login__feature-label">Operations</Text>
-                                <Text className="gx-login__feature-value">Pool</Text>
-                                <Text className="gx-login__feature-desc">围绕邮箱池分配和回收设计工作流。</Text>
-                            </div>
-                            <div className="gx-login__feature">
-                                <Text className="gx-login__feature-label">Audit</Text>
-                                <Text className="gx-login__feature-value">Trace</Text>
-                                <Text className="gx-login__feature-desc">调用路径和行为日志可追溯。</Text>
-                            </div>
+                <section className="gx-login__panel">
+                    <div className="gx-login__brand">
+                        <div className="gx-login__brand-mark">GX</div>
+                        <div>
+                            <Text className="gx-login__brand-title">GongXi Mail</Text>
+                            <Text className="gx-login__brand-subtitle">后台控制台</Text>
                         </div>
                     </div>
 
-                    <div className="gx-login__notes">
-                        <div className="gx-login__note">
-                            <Text className="gx-login__note-title">适合谁在这里工作</Text>
-                            <Text className="gx-login__note-text">
-                                日常管理邮箱资源、API Key、分组策略和验证码收取的运营与管理员。
-                            </Text>
+                    <div className="gx-login__intro">
+                        <Title level={1} className="gx-login__title">
+                            管理邮箱池、API Key 和审计记录
+                        </Title>
+                        <Text className="gx-login__subtitle">
+                            登录后直接进入后台，不再堆额外说明。
+                        </Text>
+                    </div>
+
+                    <div className="gx-login__summary-list">
+                        <div className="gx-login__summary-item">
+                            <Text className="gx-login__summary-label">邮箱资源</Text>
+                            <Text className="gx-login__summary-text">维护邮箱、分组和拉信流程。</Text>
                         </div>
-                        <div className="gx-login__note">
-                            <Text className="gx-login__note-title">这次界面优化的重点</Text>
-                            <Text className="gx-login__note-text">
-                                更清晰的信息层级、更强的后台识别度，以及更稳定的技术控制台气质。
-                            </Text>
+                        <div className="gx-login__summary-item">
+                            <Text className="gx-login__summary-label">权限边界</Text>
+                            <Text className="gx-login__summary-text">控制 Key 可用范围、速率和有效期。</Text>
+                        </div>
+                        <div className="gx-login__summary-item">
+                            <Text className="gx-login__summary-label">安全审计</Text>
+                            <Text className="gx-login__summary-text">支持 2FA 和调用日志回溯。</Text>
                         </div>
                     </div>
                 </section>
 
                 <Card className="gx-login__card">
                     <div className="gx-login__card-header">
-                        <Text className="gx-login__card-kicker">Admin Access</Text>
                         <Title level={3} className="gx-login__card-title">
                             登录控制台
                         </Title>
@@ -179,7 +161,7 @@ const LoginPage: React.FC = () => {
                         </Form.Item>
 
                         <div className="gx-login__hint">
-                            <Text className="gx-login__hint-title">安全提示</Text>
+                            <Text className="gx-login__hint-title">登录说明</Text>
                             <Text className="gx-login__hint-text">
                                 若账号已启用 2FA，提交用户名和密码后会弹窗输入 6 位动态验证码。
                             </Text>

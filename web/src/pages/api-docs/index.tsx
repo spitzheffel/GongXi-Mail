@@ -1,18 +1,12 @@
 import React, { useMemo } from 'react';
-import { Button, Card, Col, Divider, Row, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Divider, Row, Space, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
-    ApiOutlined,
-    CodeOutlined,
-    CopyOutlined,
-    HistoryOutlined,
     KeyOutlined,
     LinkOutlined,
-    SafetyCertificateOutlined,
-    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader, StatCard } from '../../components';
+import { PageHeader } from '../../components';
 import { LOG_ACTION_OPTIONS } from '../../constants/logActions';
 
 const { Paragraph, Text, Title } = Typography;
@@ -456,18 +450,6 @@ const ApiDocsPage: React.FC = () => {
     const baseUrl = window.location.origin;
 
     const apiEndpoints = useMemo(() => createApiEndpoints(baseUrl), [baseUrl]);
-    const endpointCount = apiEndpoints.length;
-    const scriptEndpointCount = apiEndpoints.filter((item) => item.responseType === 'text/plain').length;
-    const totalParamCount = apiEndpoints.reduce((sum, item) => sum + item.params.length, 0);
-
-    const copyText = async (text: string, successTip: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            message.success(successTip);
-        } catch {
-            message.error('复制失败，请手动复制。');
-        }
-    };
 
     const authColumns: ColumnsType<AuthMethod> = useMemo(
         () => [
@@ -555,9 +537,7 @@ const ApiDocsPage: React.FC = () => {
     return (
         <div className="gx-docs-shell">
             <PageHeader
-                eyebrow="Developer Reference"
                 title="API 文档"
-                subtitle="把认证方式、邮箱接口、池操作和审计动作整理成一套更适合开发接入与排障的控制台文档。"
                 extra={(
                     <>
                         <Button icon={<LinkOutlined />} onClick={() => window.open(`${baseUrl}/health`, '_blank', 'noopener,noreferrer')}>
@@ -570,85 +550,11 @@ const ApiDocsPage: React.FC = () => {
                 )}
             />
 
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Docs Console</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            接入规则、邮箱动作和审计映射在一页内完成定位。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这个页面现在更偏工程接入视角。开发同学可以先确认认证头、健康检查和 mailbox 规则，再按接口规格进入实际联调。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            <Button
-                                type="primary"
-                                icon={<CopyOutlined />}
-                                onClick={() => void copyText(baseUrl, '已复制 API 基地址。')}
-                            >
-                                复制基地址
-                            </Button>
-                            <Button
-                                icon={<SafetyCertificateOutlined />}
-                                onClick={() => void copyText('X-API-Key: sk_your_api_key', '已复制认证头示例。')}
-                            >
-                                复制认证头
-                            </Button>
-                            <Button icon={<HistoryOutlined />} onClick={() => navigate('/operation-logs')}>
-                                审计动作
-                            </Button>
-                        </Space>
-                        <div className="gx-inline-tag-list" style={{ marginTop: 18 }}>
-                            <Text className="gx-code-pill">{`${baseUrl}/health`}</Text>
-                            <Text className="gx-code-pill">X-API-Key</Text>
-                            <Text className="gx-code-pill">mailbox=inbox</Text>
-                            <Text className="gx-code-pill">mailbox=Inbox/Archive</Text>
-                        </div>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Reference Surface</Text>
-                                <Text className="gx-hero-signal__value">{endpointCount}</Text>
-                                <Text className="gx-hero-signal__description">
-                                    当前共覆盖 {endpointCount} 个核心接口，兼顾分配、拉信、清箱、池统计和重置流程。
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">认证方式</Text>
-                                    <Text className="gx-hero-mini__value">{authMethods.length}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">关键参数</Text>
-                                    <Text className="gx-hero-mini__value">{totalParamCount}</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
-
-            <Row gutter={[16, 16]}>
-                <Col xs={12} md={6}>
-                    <StatCard title="认证方式" value={authMethods.length} icon={<KeyOutlined />} iconBgColor="#0369A1" />
-                </Col>
-                <Col xs={12} md={6}>
-                    <StatCard title="核心接口" value={endpointCount} icon={<ApiOutlined />} iconBgColor="#0EA5E9" />
-                </Col>
-                <Col xs={12} md={6}>
-                    <StatCard title="脚本出口" value={scriptEndpointCount} icon={<CodeOutlined />} iconBgColor="#0F766E" />
-                </Col>
-                <Col xs={12} md={6}>
-                    <StatCard title="审计 Action" value={logActionRows.length} icon={<ThunderboltOutlined />} iconBgColor="#f59e0b" />
-                </Col>
-            </Row>
-
             <Row gutter={[16, 16]}>
                 <Col xs={24} xl={14}>
                     <Card className="gx-panel-card gx-data-table" title="接入路径与认证" bordered={false}>
                         <div className="gx-ops-note">
-                            <Text className="gx-ops-note__label">Best Entry Points</Text>
+                            <Text className="gx-ops-note__label">接入建议</Text>
                             <Text className="gx-ops-note__text">
                                 文档优先回答三个问题：邮箱是否已知、是否需要分配新邮箱、脚本是否只要纯文本结果。先选接入路径，再选具体接口。
                             </Text>
@@ -688,7 +594,7 @@ const ApiDocsPage: React.FC = () => {
                 <Col xs={24} xl={10}>
                     <Card className="gx-panel-card gx-data-table" title="运行要求与枚举约定" bordered={false}>
                         <div className="gx-ops-note gx-ops-note--warning">
-                            <Text className="gx-ops-note__label">Production Baseline</Text>
+                            <Text className="gx-ops-note__label">生产基线</Text>
                             <Text className="gx-ops-note__text">
                                 `JWT_SECRET`、`ENCRYPTION_KEY`、`ADMIN_PASSWORD` 必须通过外部环境变量注入，不要写死在仓库、镜像或启动脚本里。
                             </Text>
@@ -730,7 +636,7 @@ const ApiDocsPage: React.FC = () => {
 
             <Card className="gx-panel-card gx-data-table" title="审计动作映射" bordered={false}>
                 <div className="gx-ops-note" style={{ marginBottom: 18 }}>
-                    <Text className="gx-ops-note__label">Audit Filter Keys</Text>
+                    <Text className="gx-ops-note__label">日志筛选值</Text>
                     <Text className="gx-ops-note__text">
                         这些 Action 值会出现在操作日志页的筛选器中。联调或排障时，可以直接按 Action 缩小到某一类邮箱动作。
                     </Text>
@@ -747,7 +653,7 @@ const ApiDocsPage: React.FC = () => {
 
             <Card className="gx-panel-card gx-data-table" title="接口规格" bordered={false}>
                 <div className="gx-ops-note" style={{ marginBottom: 18 }}>
-                    <Text className="gx-ops-note__label">Mailbox Routing</Text>
+                    <Text className="gx-ops-note__label">路由说明</Text>
                     <Text className="gx-ops-note__text">
                         所有带 mailbox 参数的接口默认读取 inbox，同时支持常见别名或完整文件夹路径。自动化接入前，先确认目标邮件是否真的落在对应文件夹中。
                     </Text>

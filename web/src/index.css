@@ -1,16 +1,93 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
+  color-scheme: dark;
+  --gx-font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --gx-font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+  --gx-primary: #7dd3fc;
+  --gx-primary-strong: #38bdf8;
+  --gx-secondary: #60a5fa;
+  --gx-accent: #f59e0b;
+  --gx-success: #22c55e;
+  --gx-warning: #f59e0b;
+  --gx-danger: #ef4444;
+  --gx-bg: #0b1220;
+  --gx-bg-top: #0f172a;
+  --gx-bg-bottom: #111827;
+  --gx-surface: rgba(15, 23, 42, 0.9);
+  --gx-surface-strong: #0f1725;
+  --gx-surface-soft: rgba(30, 41, 59, 0.72);
+  --gx-surface-muted: rgba(148, 163, 184, 0.08);
+  --gx-surface-raised: #121a29;
+  --gx-nav-bg: #0f1725;
+  --gx-header-bg: rgba(15, 23, 37, 0.92);
+  --gx-panel-bg: #121a29;
+  --gx-panel-bg-soft: rgba(15, 23, 37, 0.88);
+  --gx-code-bg: #0a1120;
+  --gx-input-bg: rgba(15, 23, 37, 0.95);
+  --gx-table-head-bg: rgba(15, 23, 42, 0.96);
+  --gx-table-row-hover: rgba(30, 41, 59, 0.62);
+  --gx-border: rgba(148, 163, 184, 0.14);
+  --gx-border-strong: rgba(125, 211, 252, 0.22);
+  --gx-primary-soft: rgba(56, 189, 248, 0.12);
+  --gx-accent-soft: rgba(245, 158, 11, 0.1);
+  --gx-success-soft: rgba(34, 197, 94, 0.1);
+  --gx-warning-soft: rgba(245, 158, 11, 0.12);
+  --gx-danger-soft: rgba(239, 68, 68, 0.12);
+  --gx-text-strong: #f8fafc;
+  --gx-text-soft: #cbd5e1;
+  --gx-text-muted: #94a3b8;
+  --gx-text-faint: rgba(148, 163, 184, 0.76);
+  --gx-shadow-lg: 0 18px 40px rgba(2, 6, 23, 0.28);
+  --gx-shadow-md: 0 12px 28px rgba(2, 6, 23, 0.18);
+  --gx-shadow-sm: 0 8px 20px rgba(2, 6, 23, 0.12);
+  --gx-scroll-track: rgba(15, 23, 42, 0.48);
+  --gx-scroll-thumb: rgba(148, 163, 184, 0.36);
+  --gx-scroll-thumb-hover: rgba(148, 163, 184, 0.5);
+}
+
+:root[data-gx-theme='light'] {
+  color-scheme: light;
   --gx-primary: #0369a1;
-  --gx-secondary: #0ea5e9;
-  --gx-accent: #22c55e;
-  --gx-bg: #eef8fd;
-  --gx-surface: rgba(255, 255, 255, 0.82);
-  --gx-text-strong: #083344;
-  --gx-text-soft: #36566b;
-  --gx-text-muted: #5a7c90;
-  --gx-font-sans: "Fira Sans", "Segoe UI", sans-serif;
-  --gx-font-mono: "Fira Code", "SFMono-Regular", monospace;
+  --gx-primary-strong: #0284c7;
+  --gx-secondary: #38bdf8;
+  --gx-accent: #c2410c;
+  --gx-success: #16a34a;
+  --gx-warning: #d97706;
+  --gx-danger: #dc2626;
+  --gx-bg: #f3f6f8;
+  --gx-bg-top: #f8fafc;
+  --gx-bg-bottom: #eef2f6;
+  --gx-surface: rgba(255, 255, 255, 0.96);
+  --gx-surface-strong: #ffffff;
+  --gx-surface-soft: #f8fafc;
+  --gx-surface-muted: rgba(15, 23, 42, 0.04);
+  --gx-surface-raised: #ffffff;
+  --gx-nav-bg: #ffffff;
+  --gx-header-bg: rgba(255, 255, 255, 0.94);
+  --gx-panel-bg: #ffffff;
+  --gx-panel-bg-soft: #f8fafc;
+  --gx-code-bg: #0f172a;
+  --gx-input-bg: #ffffff;
+  --gx-table-head-bg: #f8fafc;
+  --gx-table-row-hover: #f1f5f9;
+  --gx-border: rgba(15, 23, 42, 0.1);
+  --gx-border-strong: rgba(3, 105, 161, 0.18);
+  --gx-primary-soft: rgba(14, 165, 233, 0.08);
+  --gx-accent-soft: rgba(245, 158, 11, 0.08);
+  --gx-success-soft: rgba(34, 197, 94, 0.08);
+  --gx-warning-soft: rgba(245, 158, 11, 0.08);
+  --gx-danger-soft: rgba(239, 68, 68, 0.08);
+  --gx-text-strong: #0f172a;
+  --gx-text-soft: #334155;
+  --gx-text-muted: #64748b;
+  --gx-text-faint: rgba(100, 116, 139, 0.82);
+  --gx-shadow-lg: 0 18px 36px rgba(15, 23, 42, 0.08);
+  --gx-shadow-md: 0 12px 24px rgba(15, 23, 42, 0.06);
+  --gx-shadow-sm: 0 8px 16px rgba(15, 23, 42, 0.05);
+  --gx-scroll-track: rgba(148, 163, 184, 0.16);
+  --gx-scroll-thumb: rgba(100, 116, 139, 0.32);
+  --gx-scroll-thumb-hover: rgba(100, 116, 139, 0.44);
 }
 
 * {
@@ -23,29 +100,22 @@ body,
   min-height: 100%;
 }
 
+html {
+  background: var(--gx-bg);
+}
+
 body {
   margin: 0;
   font-family: var(--gx-font-sans);
   color: var(--gx-text-strong);
-  background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.1), transparent 24%),
-    linear-gradient(180deg, #f6fbff 0%, #eef8fd 46%, #f8fcff 100%);
+  background: linear-gradient(180deg, var(--gx-bg-top) 0%, var(--gx-bg) 52%, var(--gx-bg-bottom) 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(circle at center, black 45%, transparent 88%);
-  content: "";
-  pointer-events: none;
+body::before,
+body::after {
+  display: none;
 }
 
 a {
@@ -63,22 +133,27 @@ button,
   min-height: 100vh;
 }
 
+::selection {
+  background: var(--gx-primary-soft);
+  color: var(--gx-text-strong);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(130, 176, 202, 0.18);
+  background: var(--gx-scroll-track);
 }
 
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(54, 86, 107, 0.34);
+  background: var(--gx-scroll-thumb);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(54, 86, 107, 0.48);
+  background: var(--gx-scroll-thumb-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {

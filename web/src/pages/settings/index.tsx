@@ -13,23 +13,15 @@ import {
     Typography,
     message,
 } from 'antd';
-import {
-    ApiOutlined,
-    KeyOutlined,
-    LockOutlined,
-    ReloadOutlined,
-    SafetyCertificateOutlined,
-    ScanOutlined,
-    UserOutlined,
-} from '@ant-design/icons';
+import { LockOutlined, ReloadOutlined, SafetyCertificateOutlined, ScanOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../api';
-import { PageHeader, StatCard } from '../../components';
+import { PageHeader } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { getAdminRoleLabel } from '../../utils/auth';
 import { requestData } from '../../utils/request';
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
 interface TwoFactorStatus {
     enabled: boolean;
@@ -203,10 +195,9 @@ const SettingsPage: React.FC = () => {
                 description: twoFactorStatus.enabled
                     ? '动态口令由部署层托管，当前页面只能查看状态，不能直接改绑。'
                     : '当前账号依赖环境变量里的 2FA 配置，请先在部署层确认密钥。',
-                mode: 'Env-bound',
+                mode: '环境托管',
                 nextStep: '如需改绑，请先调整部署环境中的 ADMIN_2FA_SECRET。',
-                posture: 'Managed',
-                statValue: 'ENV',
+                posture: '托管模式',
                 toneClass: 'is-warning',
             };
         }
@@ -216,10 +207,9 @@ const SettingsPage: React.FC = () => {
                 badgeColor: 'success',
                 badgeText: '2FA 已启用',
                 description: '当前登录需要密码和 6 位动态口令，属于完整的双因子校验。',
-                mode: 'App-bound',
+                mode: '验证器绑定',
                 nextStep: '建议定期校验恢复路径，并在更换设备前先完成解绑流程。',
-                posture: 'Protected',
-                statValue: '2FA',
+                posture: '已保护',
                 toneClass: 'is-success',
             };
         }
@@ -229,10 +219,9 @@ const SettingsPage: React.FC = () => {
                 badgeColor: 'processing',
                 badgeText: '待验证',
                 description: '绑定密钥已经生成，但必须通过一次验证码校验后才会真正生效。',
-                mode: 'Binding',
+                mode: '待绑定',
                 nextStep: '使用验证器扫码或手动录入密钥，然后输入当前 6 位验证码完成启用。',
-                posture: 'Pending',
-                statValue: 'PEND',
+                posture: '待完成',
                 toneClass: 'is-processing',
             };
         }
@@ -241,10 +230,9 @@ const SettingsPage: React.FC = () => {
             badgeColor: undefined,
             badgeText: '仅密码',
             description: '当前仍是单因子登录，建议先补上 2FA 再进行密码轮换。',
-            mode: 'Password',
+            mode: '仅密码',
             nextStep: '生成绑定密钥并完成一次 TOTP 验证，把登录升级成双因子模式。',
-            posture: 'Basic',
-            statValue: 'BASIC',
+            posture: '基础保护',
             toneClass: 'is-neutral',
         };
     }, [twoFactorStatus]);
@@ -258,13 +246,13 @@ const SettingsPage: React.FC = () => {
         {
             label: '用户名',
             value: admin?.username || '--',
-            meta: '当前控制台会话绑定的管理员账号。',
+            meta: '当前登录会话绑定的管理员账号。',
         },
         {
             label: '角色边界',
             value: getAdminRoleLabel(admin?.role),
             meta: admin?.role === 'SUPER_ADMIN'
-                ? '拥有全局配置、账号治理和权限管理能力。'
+                ? '可管理后台账号、权限和全局配置。'
                 : '受普通管理员权限范围限制。',
         },
         {
@@ -285,9 +273,7 @@ const SettingsPage: React.FC = () => {
     return (
         <div className="gx-ops-shell">
             <PageHeader
-                eyebrow="Security Center"
                 title="设置与安全中心"
-                subtitle="集中维护当前管理员身份、密码轮换和二次验证状态，同时保留一份轻量的 API 接入速查。"
                 extra={(
                     <Button
                         icon={<ReloadOutlined />}
@@ -299,103 +285,11 @@ const SettingsPage: React.FC = () => {
                 )}
             />
 
-            <Card className="gx-hero-card gx-panel-card" bordered={false}>
-                <Row gutter={[24, 24]} align="middle">
-                    <Col xs={24} xl={14}>
-                        <Text className="gx-hero-card__eyebrow">Operator Security</Text>
-                        <Title level={2} className="gx-hero-card__title">
-                            把身份、密码和 2FA 放进同一个安全控制台里统一管理。
-                        </Title>
-                        <Paragraph className="gx-hero-card__subtitle">
-                            这页现在更像一个账号安全中枢。你可以快速判断当前会话的保护层级、登录控制来源，以及 API 接入仍然暴露了哪些基础风险面。
-                        </Paragraph>
-                        <Space wrap className="gx-hero-card__actions">
-                            {!twoFactorStatus.legacyEnv && !twoFactorStatus.enabled && (
-                                <Button
-                                    type="primary"
-                                    icon={<SafetyCertificateOutlined />}
-                                    onClick={() => void handleSetup2Fa()}
-                                    loading={twoFactorLoading}
-                                >
-                                    {setupButtonLabel}
-                                </Button>
-                            )}
-                            <Button icon={<ApiOutlined />} onClick={() => navigate('/api-docs')}>
-                                查看 API 文档
-                            </Button>
-                        </Space>
-                    </Col>
-                    <Col xs={24} xl={10}>
-                        <div className="gx-hero-card__metrics">
-                            <div className="gx-hero-signal">
-                                <Text className="gx-hero-signal__label">Current Security Posture</Text>
-                                <Text className="gx-hero-signal__value">{securityProfile.posture}</Text>
-                                <Text className="gx-hero-signal__description">
-                                    {securityProfile.description}
-                                </Text>
-                            </div>
-                            <div className="gx-hero-signal__grid">
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">Auth Mode</Text>
-                                    <Text className="gx-hero-mini__value">{securityProfile.mode}</Text>
-                                </div>
-                                <div className="gx-hero-mini">
-                                    <Text className="gx-hero-mini__label">API Access</Text>
-                                    <Text className="gx-hero-mini__value">2 Paths</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
-
-            <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} xl={6}>
-                    <StatCard
-                        title="Role Level"
-                        value={admin?.role === 'SUPER_ADMIN' ? 'Super' : 'Admin'}
-                        icon={<UserOutlined />}
-                        iconBgColor="#0369A1"
-                        trendLabel="当前权限级别"
-                    />
-                </Col>
-                <Col xs={24} sm={12} xl={6}>
-                    <StatCard
-                        title="Auth Guard"
-                        value={securityProfile.statValue}
-                        icon={<SafetyCertificateOutlined />}
-                        iconBgColor="#0EA5E9"
-                        trendLabel="登录防护状态"
-                    />
-                </Col>
-                <Col xs={24} sm={12} xl={6}>
-                    <StatCard
-                        title="Password Policy"
-                        value="6+"
-                        suffix="chars"
-                        icon={<LockOutlined />}
-                        iconBgColor="#22C55E"
-                        trendLabel="最小密码长度"
-                    />
-                </Col>
-                <Col xs={24} sm={12} xl={6}>
-                    <StatCard
-                        title="API Paths"
-                        value="2"
-                        suffix="routes"
-                        icon={<KeyOutlined />}
-                        iconBgColor="#0F766E"
-                        trendLabel="Header / Query"
-                    />
-                </Col>
-            </Row>
-
             <div className="gx-settings-grid">
                 <Card
                     className="gx-panel-card"
-                    title="身份与控制面"
+                    title="身份与会话"
                     bordered={false}
-                    extra={<Tag color="blue">Session Snapshot</Tag>}
                 >
                     <div className="gx-settings-stack">
                         <div className="gx-settings-summary-grid">
@@ -409,7 +303,7 @@ const SettingsPage: React.FC = () => {
                         </div>
 
                         <div className="gx-ops-note">
-                            <Text className="gx-ops-note__label">Guardrails</Text>
+                            <Text className="gx-ops-note__label">说明</Text>
                             <Text className="gx-ops-note__text">
                                 当前页只处理你自己的密码和 2FA 绑定，不会直接修改其他管理员账号的安全状态。多人账号治理仍然在管理员管理页统一处理。
                             </Text>
@@ -417,7 +311,7 @@ const SettingsPage: React.FC = () => {
                                 <div className="gx-ops-note__metric">
                                     <Text className="gx-ops-note__metric-label">登录因子</Text>
                                     <Text className="gx-ops-note__metric-value">
-                                        {twoFactorStatus.enabled ? 'Password + OTP' : 'Password'}
+                                        {twoFactorStatus.enabled ? '密码 + 验证码' : '仅密码'}
                                     </Text>
                                 </div>
                                 <div className="gx-ops-note__metric">
@@ -437,13 +331,12 @@ const SettingsPage: React.FC = () => {
 
                 <Card
                     className="gx-panel-card"
-                    title="密码策略与轮换"
+                    title="密码修改"
                     bordered={false}
-                    extra={<Tag color="green">Self Service</Tag>}
                 >
                     <div className="gx-settings-stack">
                         <div className="gx-ops-note">
-                            <Text className="gx-ops-note__label">Password Policy</Text>
+                            <Text className="gx-ops-note__label">密码要求</Text>
                             <Text className="gx-ops-note__text">
                                 当前支持管理员自助轮换密码。新密码至少 6 位，建议直接使用更长的随机字符串，并和 2FA 一起开启，避免单因子长期暴露。
                             </Text>
@@ -518,7 +411,7 @@ const SettingsPage: React.FC = () => {
 
             <Card
                 className="gx-panel-card"
-                title="二次验证指挥台"
+                title="二次验证"
                 bordered={false}
                 extra={(
                     <Space wrap>
@@ -536,14 +429,14 @@ const SettingsPage: React.FC = () => {
                                 <div className="gx-settings-stack">
                                     <div className="gx-settings-status-strip">
                                         <div className={`gx-settings-status-card ${securityProfile.toneClass}`}>
-                                            <Text className="gx-settings-status-card__label">Security Posture</Text>
+                                            <Text className="gx-settings-status-card__label">当前状态</Text>
                                             <Text className="gx-settings-status-card__value">{securityProfile.posture}</Text>
                                             <Text className="gx-settings-status-card__text">
                                                 {securityProfile.description}
                                             </Text>
                                         </div>
                                         <div className="gx-settings-status-card">
-                                            <Text className="gx-settings-status-card__label">Control Source</Text>
+                                            <Text className="gx-settings-status-card__label">控制来源</Text>
                                             <Text className="gx-settings-status-card__value">{securityProfile.mode}</Text>
                                             <Text className="gx-settings-status-card__text">
                                                 {securityProfile.nextStep}
