@@ -92,6 +92,25 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         return { success: true, data: mails };
     });
 
+    // 列出邮箱文件夹 (管理员专用)
+    fastify.get('/:id/mailboxes', async (request) => {
+        const { id } = request.params as { id: string };
+
+        const emailData = await emailService.getById(parseInt(id), true);
+
+        const credentials = {
+            id: emailData.id,
+            email: emailData.email,
+            clientId: emailData.clientId,
+            refreshToken: emailData.refreshToken!,
+            autoAssigned: false,
+            fetchStrategy: emailData.group?.fetchStrategy,
+        };
+
+        const mailboxes = await mailService.getMailboxes(credentials);
+        return { success: true, data: mailboxes };
+    });
+
     // 清空邮箱 (管理员专用)
     fastify.post('/:id/clear', async (request) => {
         const { id } = request.params as { id: string };

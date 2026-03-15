@@ -157,13 +157,14 @@ npm run test
 | 参数 | 说明 |
 |------|------|
 | email | 邮箱地址（必填） |
-| mailbox | 文件夹：inbox/junk |
+| mailbox | 支持任意文件夹；可传常见别名（如 `inbox`、`junk`、`sentitems`、`drafts`、`archive`、`deleteditems`），也可传完整文件夹路径（如 `Inbox/验证码`） |
 | socks5 | SOCKS5 代理 |
 | http | HTTP 代理 |
 
 **`/api/mail_text` 专用参数**：
 | 参数 | 说明 |
 |------|------|
+| mailbox | 可选，读取指定文件夹，默认 `inbox` |
 | match | 正则表达式，用于提取特定内容 (例如 `\d{6}`) |
 
 ## 操作日志 Action 命名

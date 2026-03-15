@@ -80,7 +80,7 @@ const ApiDocsPage: React.FC = () => {
       description: '获取指定邮箱的最新一封邮件。只要邮箱地址存在于系统中即可获取。',
       params: [
         { name: 'email', type: 'string', required: true, desc: '邮箱地址' },
-        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox' },
+        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox；支持常见别名或完整文件夹路径' },
         { name: 'socks5', type: 'string', required: false, desc: 'SOCKS5 代理地址' },
         { name: 'http', type: 'string', required: false, desc: 'HTTP 代理地址' },
       ],
@@ -121,6 +121,7 @@ const ApiDocsPage: React.FC = () => {
       description: '专门为脚本设计的轻量接口，返回 `text/plain` 格式的内容。支持正则表达式提取验证码。',
       params: [
         { name: 'email', type: 'string', required: true, desc: '邮箱地址' },
+        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox；支持常见别名或完整文件夹路径' },
         { name: 'match', type: 'string', required: false, desc: '正则表达式 (例如 `\\d{6}`)' },
       ],
       example: `# 获取验证码
@@ -136,7 +137,7 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
       description: '获取指定邮箱的所有邮件。只要邮箱地址存在于系统中即可获取。',
       params: [
         { name: 'email', type: 'string', required: true, desc: '邮箱地址' },
-        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox' },
+        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox；支持常见别名或完整文件夹路径' },
         { name: 'socks5', type: 'string', required: false, desc: 'SOCKS5 代理地址' },
         { name: 'http', type: 'string', required: false, desc: 'HTTP 代理地址' },
       ],
@@ -171,7 +172,7 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
       description: '清空指定邮箱的所有邮件。',
       params: [
         { name: 'email', type: 'string', required: true, desc: '邮箱地址' },
-        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox' },
+        { name: 'mailbox', type: 'string', required: false, desc: '邮件文件夹，默认 inbox；支持常见别名或完整文件夹路径' },
         { name: 'socks5', type: 'string', required: false, desc: 'SOCKS5 代理地址' },
         { name: 'http', type: 'string', required: false, desc: 'HTTP 代理地址' },
       ],

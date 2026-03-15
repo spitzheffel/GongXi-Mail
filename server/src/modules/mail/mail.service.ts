@@ -54,6 +54,170 @@ interface GraphMessagesResponse {
     value?: GraphMessage[];
 }
 
+interface GraphMailFolder {
+    id?: string;
+    displayName?: string;
+    childFolderCount?: number;
+    wellKnownName?: string;
+}
+
+interface GraphMailFolderResponse {
+    value?: GraphMailFolder[];
+    '@odata.nextLink'?: string;
+}
+
+interface MailboxFolder {
+    name: string;
+    path: string;
+    mailbox: string;
+    provider: 'graph' | 'imap';
+    specialUse: string | null;
+}
+
+interface GraphMailboxFolder extends MailboxFolder {
+    id: string;
+    childFolderCount: number;
+}
+
+interface ImapBoxNode {
+    attribs?: string[];
+    delimiter?: string | null;
+    delim?: string | null;
+    children?: Record<string, ImapBoxNode>;
+}
+
+interface ImapMailboxFolder extends MailboxFolder {
+    actualPath: string;
+    attribs: string[];
+}
+
+const GRAPH_MAILBOX_ALIASES: Record<string, string> = {
+    'inbox': 'inbox',
+    'junk': 'junkemail',
+    'junk email': 'junkemail',
+    'junkemail': 'junkemail',
+    'spam': 'junkemail',
+    'sent': 'sentitems',
+    'sent items': 'sentitems',
+    'sent mail': 'sentitems',
+    'sentitems': 'sentitems',
+    'draft': 'drafts',
+    'drafts': 'drafts',
+    'archive': 'archive',
+    'outbox': 'outbox',
+    'deleted': 'deleteditems',
+    'deleted items': 'deleteditems',
+    'deleteditems': 'deleteditems',
+    'trash': 'deleteditems',
+    'recycle bin': 'deleteditems',
+    '收件箱': 'inbox',
+    '垃圾邮件': 'junkemail',
+    '垃圾邮件箱': 'junkemail',
+    '已发送': 'sentitems',
+    '草稿': 'drafts',
+    '草稿箱': 'drafts',
+    '归档': 'archive',
+    '发件箱': 'outbox',
+    '已删除': 'deleteditems',
+    '垃圾箱': 'deleteditems',
+};
+
+const IMAP_SPECIAL_USE_TO_MAILBOX: Record<string, string> = {
+    '\\inbox': 'inbox',
+    '\\junk': 'junkemail',
+    '\\spam': 'junkemail',
+    '\\sent': 'sentitems',
+    '\\drafts': 'drafts',
+    '\\trash': 'deleteditems',
+    '\\archive': 'archive',
+    '\\outbox': 'outbox',
+};
+
+const MAILBOX_SORT_ORDER = ['inbox', 'junkemail', 'sentitems', 'drafts', 'deleteditems', 'archive', 'outbox'];
+
+function normalizeMailboxKey(value: string): string {
+    return value
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/\s+/g, ' ')
+        .replace(/^\/+|\/+$/g, '')
+        .toLowerCase();
+}
+
+function buildMailboxPath(segments: string[]): string {
+    return segments
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .join('/');
+}
+
+function getWellKnownMailbox(mailbox: string): string | null {
+    const normalized = normalizeMailboxKey(mailbox);
+    if (!normalized) {
+        return null;
+    }
+    return GRAPH_MAILBOX_ALIASES[normalized] ?? null;
+}
+
+function getImapSpecialUseMailbox(attribs?: string[]): string | null {
+    for (const attr of attribs ?? []) {
+        const mapped = IMAP_SPECIAL_USE_TO_MAILBOX[attr.trim().toLowerCase()];
+        if (mapped) {
+            return mapped;
+        }
+    }
+    return null;
+}
+
+function dedupeMailboxFolders<T extends MailboxFolder>(folders: T[]): T[] {
+    const seen = new Set<string>();
+    return folders.filter((folder) => {
+        const key = normalizeMailboxKey(folder.path);
+        if (!key || seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
+function sortMailboxFolders<T extends MailboxFolder>(folders: T[]): T[] {
+    return [...folders].sort((left, right) => {
+        const leftRank = MAILBOX_SORT_ORDER.indexOf(left.specialUse ?? '');
+        const rightRank = MAILBOX_SORT_ORDER.indexOf(right.specialUse ?? '');
+        const normalizedLeftRank = leftRank === -1 ? MAILBOX_SORT_ORDER.length : leftRank;
+        const normalizedRightRank = rightRank === -1 ? MAILBOX_SORT_ORDER.length : rightRank;
+
+        if (normalizedLeftRank !== normalizedRightRank) {
+            return normalizedLeftRank - normalizedRightRank;
+        }
+
+        const leftDepth = left.path.split('/').length;
+        const rightDepth = right.path.split('/').length;
+        if (leftDepth !== rightDepth) {
+            return leftDepth - rightDepth;
+        }
+
+        return left.path.localeCompare(right.path, 'zh-CN');
+    });
+}
+
+function createImapClient(email: string, authString: string) {
+    const imapConfig: ConstructorParameters<typeof Imap>[0] = {
+        user: email,
+        password: '',
+        xoauth2: authString,
+        host: 'outlook.office365.com',
+        port: 993,
+        tls: true,
+        tlsOptions: {
+            rejectUnauthorized: false,
+        },
+    };
+
+    return new Imap(imapConfig);
+}
+
 function getErrorMessage(error: unknown): string {
     if (!error || typeof error !== 'object') {
         return 'Unknown error';
@@ -212,26 +376,138 @@ export const mailService = {
         }
     },
 
-    /**
-     * 使用 Graph API 获取邮件
-     */
-    async getEmailsViaGraphApi(
+    async fetchGraphMailFoldersPage(
+        accessToken: string,
+        url: string,
+        proxyConfig?: { socks5?: string; http?: string }
+    ): Promise<{ folders: GraphMailFolder[]; nextLink?: string }> {
+        const response = await proxyFetch(
+            url,
+            {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+            },
+            proxyConfig
+        );
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Graph API error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json() as GraphMailFolderResponse;
+        return {
+            folders: Array.isArray(data.value) ? data.value : [],
+            nextLink: typeof data['@odata.nextLink'] === 'string' ? data['@odata.nextLink'] : undefined,
+        };
+    },
+
+    async getGraphMailboxFolders(
+        accessToken: string,
+        proxyConfig?: { socks5?: string; http?: string },
+        parentId?: string,
+        parentPath: string[] = []
+    ): Promise<GraphMailboxFolder[]> {
+        const folders: GraphMailboxFolder[] = [];
+        let nextLink: string | undefined = parentId
+            ? `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$top=200&includeHiddenFolders=true&$select=id,displayName,childFolderCount,wellKnownName`
+            : 'https://graph.microsoft.com/v1.0/me/mailFolders?$top=200&includeHiddenFolders=true&$select=id,displayName,childFolderCount,wellKnownName';
+
+        while (nextLink) {
+            const page = await mailService.fetchGraphMailFoldersPage(accessToken, nextLink, proxyConfig);
+            for (const folder of page.folders) {
+                if (typeof folder.id !== 'string' || !folder.id) {
+                    continue;
+                }
+
+                const name = typeof folder.displayName === 'string' && folder.displayName.trim()
+                    ? folder.displayName.trim()
+                    : folder.id;
+                const path = buildMailboxPath([...parentPath, name]);
+                const specialUse = typeof folder.wellKnownName === 'string'
+                    ? folder.wellKnownName.toLowerCase()
+                    : null;
+
+                folders.push({
+                    id: folder.id,
+                    name,
+                    path,
+                    mailbox: path,
+                    provider: 'graph',
+                    specialUse,
+                    childFolderCount: typeof folder.childFolderCount === 'number'
+                        ? folder.childFolderCount
+                        : 0,
+                });
+
+                if ((folder.childFolderCount ?? 0) > 0) {
+                    const childFolders = await mailService.getGraphMailboxFolders(
+                        accessToken,
+                        proxyConfig,
+                        folder.id,
+                        [...parentPath, name]
+                    );
+                    folders.push(...childFolders);
+                }
+            }
+
+            nextLink = page.nextLink;
+        }
+
+        return folders;
+    },
+
+    async listMailboxesViaGraphApi(
+        accessToken: string,
+        proxyConfig?: { socks5?: string; http?: string }
+    ): Promise<GraphMailboxFolder[]> {
+        const folders = await mailService.getGraphMailboxFolders(accessToken, proxyConfig);
+        return sortMailboxFolders(dedupeMailboxFolders(folders));
+    },
+
+    async resolveGraphMailbox(
         accessToken: string,
         mailbox: string,
+        proxyConfig?: { socks5?: string; http?: string }
+    ): Promise<string> {
+        const trimmedMailbox = mailbox?.trim();
+        if (!trimmedMailbox) {
+            return 'inbox';
+        }
+
+        const wellKnownMailbox = getWellKnownMailbox(trimmedMailbox);
+        if (wellKnownMailbox) {
+            return wellKnownMailbox;
+        }
+
+        const folders = await mailService.listMailboxesViaGraphApi(accessToken, proxyConfig);
+        const normalizedMailbox = normalizeMailboxKey(trimmedMailbox);
+
+        const pathMatch = folders.find((folder) => normalizeMailboxKey(folder.path) === normalizedMailbox);
+        if (pathMatch) {
+            return pathMatch.id;
+        }
+
+        const nameMatches = folders.filter((folder) => normalizeMailboxKey(folder.name) === normalizedMailbox);
+        if (nameMatches.length === 1) {
+            return nameMatches[0].id;
+        }
+
+        throw new AppError('MAILBOX_NOT_FOUND', `Mailbox '${mailbox}' not found`, 404);
+    },
+
+    async getEmailsViaResolvedGraphMailbox(
+        accessToken: string,
+        resolvedMailbox: string,
         limit: number = 100,
         proxyConfig?: { socks5?: string; http?: string }
     ): Promise<EmailMessage[]> {
-        // 转换邮箱名称
-        let folder = 'inbox';
-        if (mailbox?.toLowerCase() === 'junk') {
-            folder = 'junkemail';
-        } else if (mailbox?.toLowerCase() === 'inbox') {
-            folder = 'inbox';
-        }
-
         try {
             const response = await proxyFetch(
-                `https://graph.microsoft.com/v1.0/me/mailFolders/${folder}/messages?$top=${limit}&$orderby=receivedDateTime desc`,
+                `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(resolvedMailbox)}/messages?$top=${limit}&$orderby=receivedDateTime desc`,
                 {
                     method: 'GET',
                     headers: {
@@ -259,9 +535,27 @@ export const mailService = {
                 date: item.createdDateTime || '',
             }));
         } catch (err) {
-            logger.error({ err }, 'Failed to fetch emails via Graph API');
+            logger.error({ err, mailbox: resolvedMailbox }, 'Failed to fetch emails via Graph API');
             throw err;
         }
+    },
+
+    /**
+     * 使用 Graph API 获取邮件
+     */
+    async getEmailsViaGraphApi(
+        accessToken: string,
+        mailbox: string,
+        limit: number = 100,
+        proxyConfig?: { socks5?: string; http?: string }
+    ): Promise<EmailMessage[]> {
+        const resolvedMailbox = await mailService.resolveGraphMailbox(accessToken, mailbox, proxyConfig);
+        return mailService.getEmailsViaResolvedGraphMailbox(
+            accessToken,
+            resolvedMailbox,
+            limit,
+            proxyConfig
+        );
     },
 
     /**
@@ -328,6 +622,146 @@ export const mailService = {
         return Buffer.from(authString).toString('base64');
     },
 
+    flattenImapMailboxes(
+        boxes: Record<string, ImapBoxNode>,
+        parentPath: string[] = [],
+        parentActualPath?: string
+    ): ImapMailboxFolder[] {
+        const folders: ImapMailboxFolder[] = [];
+
+        for (const [name, box] of Object.entries(boxes)) {
+            const attribs = Array.isArray(box.attribs) ? box.attribs : [];
+            const specialUse = getImapSpecialUseMailbox(attribs);
+            const delimiter = typeof box.delimiter === 'string' && box.delimiter.length > 0
+                ? box.delimiter
+                : typeof box.delim === 'string' && box.delim.length > 0
+                    ? box.delim
+                    : '/';
+            const path = buildMailboxPath([...parentPath, name]);
+            const actualPath = parentActualPath ? `${parentActualPath}${delimiter}${name}` : name;
+            const isSelectable = !attribs.some((attr) => attr.trim().toLowerCase() === '\\noselect');
+
+            if (isSelectable) {
+                folders.push({
+                    name,
+                    path,
+                    mailbox: path,
+                    provider: 'imap',
+                    specialUse,
+                    actualPath,
+                    attribs,
+                });
+            }
+
+            if (box.children && typeof box.children === 'object') {
+                folders.push(
+                    ...mailService.flattenImapMailboxes(
+                        box.children,
+                        [...parentPath, name],
+                        actualPath
+                    )
+                );
+            }
+        }
+
+        return folders;
+    },
+
+    async listMailboxesViaImap(
+        email: string,
+        authString: string
+    ): Promise<ImapMailboxFolder[]> {
+        return new Promise((resolve, reject) => {
+            const imap = createImapClient(email, authString);
+            let settled = false;
+
+            const finishResolve = (folders: ImapMailboxFolder[]) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve(sortMailboxFolders(dedupeMailboxFolders(folders)));
+            };
+
+            const finishReject = (error: unknown) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                reject(error);
+            };
+
+            imap.once('ready', () => {
+                imap.getBoxes((err: Error | null, boxes: unknown) => {
+                    if (err) {
+                        imap.end();
+                        finishReject(err);
+                        return;
+                    }
+
+                    try {
+                        const flattened = mailService.flattenImapMailboxes(
+                            (boxes ?? {}) as Record<string, ImapBoxNode>
+                        );
+                        imap.end();
+                        finishResolve(flattened);
+                    } catch (flattenErr) {
+                        imap.end();
+                        finishReject(flattenErr);
+                    }
+                });
+            });
+
+            imap.once('error', (err: Error) => {
+                logger.error({ err, email }, 'IMAP mailbox listing error');
+                finishReject(err);
+            });
+
+            imap.connect();
+        });
+    },
+
+    async resolveImapMailboxPath(
+        email: string,
+        authString: string,
+        mailbox: string
+    ): Promise<string> {
+        const trimmedMailbox = mailbox?.trim();
+        if (!trimmedMailbox) {
+            return 'INBOX';
+        }
+
+        const folders = await mailService.listMailboxesViaImap(email, authString);
+        const normalizedMailbox = normalizeMailboxKey(trimmedMailbox);
+        const wellKnownMailbox = getWellKnownMailbox(trimmedMailbox);
+
+        if (wellKnownMailbox) {
+            const specialUseMatch = folders.find((folder) => folder.specialUse === wellKnownMailbox);
+            if (specialUseMatch) {
+                return specialUseMatch.actualPath;
+            }
+
+            if (wellKnownMailbox === 'inbox') {
+                return 'INBOX';
+            }
+        }
+
+        const pathMatch = folders.find((folder) =>
+            normalizeMailboxKey(folder.path) === normalizedMailbox ||
+            folder.actualPath.trim().toLowerCase() === trimmedMailbox.toLowerCase()
+        );
+        if (pathMatch) {
+            return pathMatch.actualPath;
+        }
+
+        const nameMatches = folders.filter((folder) => normalizeMailboxKey(folder.name) === normalizedMailbox);
+        if (nameMatches.length === 1) {
+            return nameMatches[0].actualPath;
+        }
+
+        return trimmedMailbox;
+    },
+
     /**
      * 使用 IMAP 获取邮件
      */
@@ -337,28 +771,34 @@ export const mailService = {
         mailbox: string = 'INBOX',
         limit: number = 100
     ): Promise<EmailMessage[]> {
+        const resolvedMailbox = await mailService.resolveImapMailboxPath(email, authString, mailbox);
         return new Promise((resolve, reject) => {
-            const imapConfig: ConstructorParameters<typeof Imap>[0] = {
-                user: email,
-                password: '',
-                xoauth2: authString,
-                host: 'outlook.office365.com',
-                port: 993,
-                tls: true,
-                tlsOptions: {
-                    rejectUnauthorized: false,
-                },
-            };
-            const imap = new Imap(imapConfig);
-
+            const imap = createImapClient(email, authString);
             const emailList: EmailMessage[] = [];
             let messageCount = 0;
             let processedCount = 0;
+            let settled = false;
+
+            const finishResolve = (messages: EmailMessage[]) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve(messages);
+            };
+
+            const finishReject = (error: unknown) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                reject(error);
+            };
 
             imap.once('ready', async () => {
                 try {
                     await new Promise<void>((res, rej) => {
-                        imap.openBox(mailbox, true, (err) => {
+                        imap.openBox(resolvedMailbox, true, (err) => {
                             if (err) return rej(err);
                             res();
                         });
@@ -367,12 +807,14 @@ export const mailService = {
                     imap.search(['ALL'], (err: Error | null, results: number[]) => {
                         if (err) {
                             imap.end();
-                            return reject(err);
+                            finishReject(err);
+                            return;
                         }
 
                         if (!results || results.length === 0) {
                             imap.end();
-                            return resolve([]);
+                            finishResolve([]);
+                            return;
                         }
 
                         // 限制返回数量
@@ -410,7 +852,7 @@ export const mailService = {
                         f.once('error', (fetchErr: Error) => {
                             logger.error({ fetchErr }, 'IMAP fetch error');
                             imap.end();
-                            reject(fetchErr);
+                            finishReject(fetchErr);
                         });
 
                         f.once('end', () => {
@@ -422,13 +864,13 @@ export const mailService = {
                     });
                 } catch (err) {
                     imap.end();
-                    reject(err);
+                    finishReject(err);
                 }
             });
 
             imap.once('error', (err: Error) => {
-                logger.error({ err }, 'IMAP connection error');
-                reject(err);
+                logger.error({ err, mailbox: resolvedMailbox }, 'IMAP connection error');
+                finishReject(err);
             });
 
             imap.once('end', () => {
@@ -439,11 +881,87 @@ export const mailService = {
                     const dateB = b.date ? new Date(b.date).getTime() : 0;
                     return dateB - dateA;
                 });
-                resolve(emailList);
+                finishResolve(emailList);
             });
 
             imap.connect();
         });
+    },
+
+    async getMailboxes(
+        credentials: Credentials,
+        options?: { socks5?: string; http?: string }
+    ) {
+        const proxyConfig = { socks5: options?.socks5, http: options?.http };
+        const strategy: MailFetchStrategy = credentials.fetchStrategy || 'GRAPH_FIRST';
+
+        const listViaGraph = async () => {
+            const tokenResult = await this.getGraphAccessToken(credentials, proxyConfig);
+            if (!tokenResult) {
+                throw new AppError('GRAPH_TOKEN_FAILED', 'Failed to get Graph API access token', 502);
+            }
+            if (!tokenResult.hasMailRead) {
+                throw new AppError('GRAPH_SCOPE_MISSING', 'Graph token missing Mail.Read scope', 502);
+            }
+
+            logger.info({ email: credentials.email, strategy }, 'Using Graph API for mailbox listing');
+            const folders = await this.listMailboxesViaGraphApi(tokenResult.accessToken, proxyConfig);
+            return {
+                folders: folders.map(({ name, path, mailbox, provider, specialUse }) => ({
+                    name,
+                    path,
+                    mailbox,
+                    provider,
+                    specialUse,
+                })),
+                method: 'graph_api' as const,
+            };
+        };
+
+        const listViaImap = async () => {
+            logger.info({ email: credentials.email, strategy }, 'Using IMAP for mailbox listing');
+            const imapToken = await this.getImapAccessToken(credentials, proxyConfig);
+            if (!imapToken) {
+                throw new AppError('IMAP_TOKEN_FAILED', 'Failed to get IMAP access token', 502);
+            }
+
+            const authString = this.generateAuthString(credentials.email, imapToken);
+            const folders = await this.listMailboxesViaImap(credentials.email, authString);
+            return {
+                folders: folders.map(({ name, path, mailbox, provider, specialUse }) => ({
+                    name,
+                    path,
+                    mailbox,
+                    provider,
+                    specialUse,
+                })),
+                method: 'imap' as const,
+            };
+        };
+
+        if (strategy === 'GRAPH_ONLY') {
+            return listViaGraph();
+        }
+
+        if (strategy === 'IMAP_ONLY') {
+            return listViaImap();
+        }
+
+        if (strategy === 'IMAP_FIRST') {
+            try {
+                return await listViaImap();
+            } catch (imapErr) {
+                logger.warn({ imapErr, email: credentials.email }, 'IMAP mailbox listing failed, fallback to Graph API');
+                return listViaGraph();
+            }
+        }
+
+        try {
+            return await listViaGraph();
+        } catch (graphErr) {
+            logger.warn({ graphErr, email: credentials.email }, 'Graph mailbox listing failed, fallback to IMAP');
+            return listViaImap();
+        }
     },
 
     /**
@@ -557,6 +1075,12 @@ export const mailService = {
             throw new AppError('GRAPH_API_FAILED', 'Failed to get access token', 500);
         }
 
+        const resolvedMailbox = await this.resolveGraphMailbox(
+            tokenResult.accessToken,
+            options.mailbox,
+            proxyConfig
+        );
+
         // 1. 获取所有邮件 ID
         let page = 0;
         let deletedCount = 0;
@@ -564,9 +1088,9 @@ export const mailService = {
 
         try {
             while (hasMore && page < 10) { // 限制最大页数防止超时
-                const messages = await this.getEmailsViaGraphApi(
+                const messages = await this.getEmailsViaResolvedGraphMailbox(
                     tokenResult.accessToken,
-                    options.mailbox,
+                    resolvedMailbox,
                     500, // 每次取 500
                     proxyConfig
                 );
@@ -620,7 +1144,7 @@ export const mailService = {
     ) {
         try {
             await proxyFetch(
-                `https://graph.microsoft.com/v1.0/me/messages/${messageId}`,
+                `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(messageId)}`,
                 {
                     method: 'DELETE',
                     headers: {

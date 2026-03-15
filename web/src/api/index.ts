@@ -518,6 +518,10 @@ export const emailApi = {
     viewMails: <T = Record<string, unknown>>(id: number, mailbox?: string) =>
         requestGet<{ messages: T[] }>(`/admin/emails/${id}/mails`, { params: { mailbox } }),
 
+    // 获取邮箱文件夹 (管理员专用)
+    getMailboxes: <T = Record<string, unknown>>(id: number) =>
+        requestGet<{ folders: T[]; method: string }>(`/admin/emails/${id}/mailboxes`),
+
     // 清空邮箱 (管理员专用)
     clearMailbox: (id: number, mailbox?: string) =>
         requestPost<{ deletedCount: number }, { mailbox?: string }>(`/admin/emails/${id}/clear`, {
