@@ -18,6 +18,7 @@ const mailRequestSchema = z.object({
 const mailTextRequestSchema = z.object({
     email: z.string().email(),
     match: z.string().optional(), // 正则表达式 (可选)
+    mailbox: z.string().optional(),
 });
 
 function getErrorStatusCode(err: unknown): number {
@@ -242,7 +243,7 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
 
         try {
             const result = await mailService.getEmails(credentials, {
-                mailbox: 'inbox',
+                mailbox: input.mailbox || 'inbox',
                 limit: 1, // 只取最新一封
             });
 

@@ -53,6 +53,80 @@ const MAIL_FETCH_STRATEGY_LABELS: Record<MailFetchStrategy, string> = {
     IMAP_ONLY: '仅 IMAP',
 };
 
+const MAILBOX_SPECIAL_USE_LABELS: Record<string, string> = {
+    inbox: '收件箱',
+    junkemail: '垃圾邮件',
+    sentitems: '已发送',
+    drafts: '草稿箱',
+    deleteditems: '已删除',
+    archive: '存档',
+    outbox: '发件箱',
+};
+
+const MAILBOX_NAME_LABELS: Record<string, string> = {
+    inbox: '收件箱',
+    junk: '垃圾邮件',
+    'junk email': '垃圾邮件',
+    junkemail: '垃圾邮件',
+    spam: '垃圾邮件',
+    sent: '已发送',
+    'sent items': '已发送',
+    'sent mail': '已发送',
+    sentitems: '已发送',
+    draft: '草稿箱',
+    drafts: '草稿箱',
+    deleted: '已删除',
+    'deleted items': '已删除',
+    deleteditems: '已删除',
+    trash: '已删除',
+    archive: '存档',
+    outbox: '发件箱',
+};
+
+const normalizeMailboxSegment = (value: string): string =>
+    value
+        .trim()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+const formatMailboxSegment = (segment: string, specialUse?: string | null): string => {
+    const trimmed = segment.trim();
+    if (!trimmed) {
+        return segment;
+    }
+
+    const translated =
+        (specialUse ? MAILBOX_SPECIAL_USE_LABELS[specialUse.toLowerCase()] : undefined)
+        || MAILBOX_NAME_LABELS[normalizeMailboxSegment(trimmed)];
+
+    if (!translated || translated === trimmed) {
+        return trimmed;
+    }
+
+    return `${translated}（${trimmed}）`;
+};
+
+const formatMailboxPath = (folder: MailboxFolder): string => {
+    const segments = folder.path
+        .split('/')
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+
+    if (segments.length === 0) {
+        return formatMailboxSegment(folder.name, folder.specialUse);
+    }
+
+    return segments
+        .map((segment, index) =>
+            formatMailboxSegment(
+                segment,
+                index === segments.length - 1 ? folder.specialUse : undefined
+            )
+        )
+        .join(' / ');
+};
+
 interface EmailGroup {
     id: number;
     name: string;
@@ -89,6 +163,19 @@ interface MailItem {
     date: string;
 }
 
+interface MailboxFolder {
+    name: string;
+    path: string;
+    mailbox: string;
+    provider: 'graph' | 'imap';
+    specialUse?: string | null;
+}
+
+interface MailboxListResult {
+    folders: MailboxFolder[];
+    method: string;
+}
+
 interface EmailDetailsResult extends EmailAccount {
     refreshToken: string;
 }
@@ -112,9 +199,11 @@ const EmailsPage: React.FC = () => {
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
     const [mailList, setMailList] = useState<MailItem[]>([]);
     const [mailLoading, setMailLoading] = useState(false);
+    const [mailboxes, setMailboxes] = useState<MailboxFolder[]>([]);
+    const [mailboxesLoading, setMailboxesLoading] = useState(false);
     const [currentEmail, setCurrentEmail] = useState<string>('');
     const [currentEmailId, setCurrentEmailId] = useState<number | null>(null);
-    const [currentMailbox, setCurrentMailbox] = useState<string>('INBOX');
+    const [currentMailbox, setCurrentMailbox] = useState<string>('');
     const [emailDetailVisible, setEmailDetailVisible] = useState(false);
     const [emailDetailContent, setEmailDetailContent] = useState<string>('');
     const [emailDetailSubject, setEmailDetailSubject] = useState<string>('');
@@ -129,6 +218,7 @@ const EmailsPage: React.FC = () => {
     const [assignGroupModalVisible, setAssignGroupModalVisible] = useState(false);
     const [assignTargetGroupId, setAssignTargetGroupId] = useState<number | undefined>(undefined);
     const latestListRequestIdRef = useRef(0);
+    const latestMailboxRequestIdRef = useRef(0);
 
     const toOptionalNumber = (value: unknown): number | undefined => {
         if (value === undefined || value === null || value === '') {
@@ -350,6 +440,11 @@ const EmailsPage: React.FC = () => {
     };
 
     const loadMails = useCallback(async (emailId: number, mailbox: string, showSuccessToast: boolean = false) => {
+        if (!mailbox) {
+            setMailList([]);
+            return;
+        }
+
         setMailLoading(true);
         const result = await requestData<{ messages: MailItem[] }>(
             () => emailApi.viewMails(emailId, mailbox),
@@ -364,21 +459,67 @@ const EmailsPage: React.FC = () => {
         setMailLoading(false);
     }, []);
 
-    const handleViewMails = useCallback(async (record: EmailAccount, mailbox: string) => {
+    const loadMailboxes = useCallback(async (emailId: number, preferredMailbox?: string) => {
+        const currentRequestId = ++latestMailboxRequestIdRef.current;
+        setMailboxesLoading(true);
+
+        const result = await requestData<MailboxListResult>(
+            () => emailApi.getMailboxes<MailboxFolder>(emailId),
+            '获取邮箱文件夹失败'
+        );
+
+        if (currentRequestId !== latestMailboxRequestIdRef.current) {
+            return null;
+        }
+
+        const folders = result?.folders || [];
+        setMailboxes(folders);
+
+        const selectedMailbox = (
+            preferredMailbox && folders.some((folder) => folder.mailbox === preferredMailbox)
+                ? preferredMailbox
+                : folders.find((folder) => folder.specialUse === 'inbox')?.mailbox
+                    || folders[0]?.mailbox
+                    || ''
+        );
+        setCurrentMailbox(selectedMailbox);
+        setMailboxesLoading(false);
+
+        return {
+            folders,
+            selectedMailbox,
+        };
+    }, []);
+
+    const handleOpenMails = useCallback(async (record: EmailAccount) => {
         setCurrentEmail(record.email);
         setCurrentEmailId(record.id);
-        setCurrentMailbox(mailbox);
+        setCurrentMailbox('');
+        setMailboxes([]);
+        setMailList([]);
         setMailModalVisible(true);
-        await loadMails(record.id, mailbox);
-    }, [loadMails]);
+
+        const mailboxResult = await loadMailboxes(record.id);
+        if (!mailboxResult?.selectedMailbox) {
+            return;
+        }
+
+        await loadMails(record.id, mailboxResult.selectedMailbox);
+    }, [loadMailboxes, loadMails]);
+
+    const handleMailboxChange = async (mailbox: string) => {
+        if (!currentEmailId) return;
+        setCurrentMailbox(mailbox);
+        await loadMails(currentEmailId, mailbox);
+    };
 
     const handleRefreshMails = async () => {
-        if (!currentEmailId) return;
+        if (!currentEmailId || !currentMailbox) return;
         await loadMails(currentEmailId, currentMailbox, true);
     };
 
     const handleClearMailbox = async () => {
-        if (!currentEmailId) return;
+        if (!currentEmailId || !currentMailbox) return;
         try {
             const res = await emailApi.clearMailbox(currentEmailId, currentMailbox);
             if (res.code === 200) {
@@ -561,21 +702,14 @@ const EmailsPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 240,
+            width: 180,
             render: (_: unknown, record: EmailAccount) => (
                 <Space>
-                    <Tooltip title="收件箱">
+                    <Tooltip title="查看文件夹">
                         <Button
                             type="text"
                             icon={<MailOutlined />}
-                            onClick={() => handleViewMails(record, 'INBOX')}
-                        />
-                    </Tooltip>
-                    <Tooltip title="垃圾箱">
-                        <Button
-                            type="text"
-                            icon={<DeleteOutlined style={{ color: '#faad14' }} />}
-                            onClick={() => handleViewMails(record, 'Junk')}
+                            onClick={() => handleOpenMails(record)}
                         />
                     </Tooltip>
                     <Tooltip title="编辑">
@@ -596,7 +730,7 @@ const EmailsPage: React.FC = () => {
                 </Space>
             ),
         },
-    ], [handleDelete, handleEdit, handleViewMails]);
+    ], [handleDelete, handleEdit, handleOpenMails]);
 
     const rowSelection = useMemo(
         () => ({
@@ -619,6 +753,28 @@ const EmailsPage: React.FC = () => {
             },
         }),
         [page, pageSize, total]
+    );
+
+    const mailboxOptions = useMemo(
+        () =>
+            mailboxes.map((folder: MailboxFolder) => ({
+                value: folder.mailbox,
+                label: formatMailboxPath(folder),
+            })),
+        [mailboxes]
+    );
+
+    const currentMailboxLabel = useMemo(
+        () =>
+            (() => {
+                const currentFolder = mailboxes.find(
+                    (folder: MailboxFolder) => folder.mailbox === currentMailbox
+                );
+                return currentFolder ? formatMailboxPath(currentFolder) : currentMailbox;
+            })()
+            || currentMailbox
+            || '邮箱文件夹',
+        [currentMailbox, mailboxes]
     );
 
     const emailDetailSrcDoc = useMemo(
@@ -945,30 +1101,57 @@ const EmailsPage: React.FC = () => {
             {/* 邮件列表 Modal */}
             {mailModalVisible && (
                 <Modal
-                    title={`${currentEmail} 的${currentMailbox === 'INBOX' ? '收件箱' : '垃圾箱'}`}
+                    title={`${currentEmail} · ${currentMailboxLabel}`}
                     open={mailModalVisible}
-                    onCancel={() => setMailModalVisible(false)}
+                    onCancel={() => {
+                        latestMailboxRequestIdRef.current += 1;
+                        setMailModalVisible(false);
+                        setCurrentEmail('');
+                        setCurrentEmailId(null);
+                        setCurrentMailbox('');
+                        setMailboxes([]);
+                        setMailboxesLoading(false);
+                        setMailList([]);
+                    }}
                     footer={null}
                     destroyOnClose
                     width={1000}
                     styles={{ body: { padding: '16px 24px' } }}
                 >
-                    <Space style={{ marginBottom: 16 }}>
-                        <Button type="primary" onClick={handleRefreshMails} loading={mailLoading}>
+                    <Space wrap style={{ marginBottom: 16 }}>
+                        <Select
+                            showSearch
+                            placeholder={mailboxesLoading ? '加载文件夹中...' : '选择文件夹'}
+                            value={currentMailbox || undefined}
+                            options={mailboxOptions}
+                            loading={mailboxesLoading}
+                            disabled={mailboxesLoading || mailboxOptions.length === 0}
+                            optionFilterProp="label"
+                            style={{ width: 320 }}
+                            onChange={(value: string) => {
+                                void handleMailboxChange(value);
+                            }}
+                        />
+                        <Button
+                            type="primary"
+                            onClick={handleRefreshMails}
+                            loading={mailLoading}
+                            disabled={!currentMailbox || mailboxesLoading}
+                        >
                             收取新邮件
                         </Button>
                         <Popconfirm
-                            title={`确定要清空${currentMailbox === 'INBOX' ? '收件箱' : '垃圾箱'}的所有邮件吗？`}
+                            title={`确定要清空 ${currentMailboxLabel} 的所有邮件吗？`}
                             onConfirm={handleClearMailbox}
                         >
-                            <Button danger>清空</Button>
+                            <Button danger disabled={!currentMailbox || mailboxesLoading}>清空</Button>
                         </Popconfirm>
                         <span style={{ marginLeft: 16, color: '#888' }}>
                             共 {mailList.length} 封邮件
                         </span>
                     </Space>
                     <List
-                        loading={mailLoading}
+                        loading={mailLoading || mailboxesLoading}
                         dataSource={mailList}
                         itemLayout="horizontal"
                         pagination={{
