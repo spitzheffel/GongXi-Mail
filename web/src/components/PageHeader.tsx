@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography, Breadcrumb, Space } from 'antd';
+import { Link } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
@@ -8,6 +9,7 @@ interface PageHeaderProps {
     subtitle?: string;
     breadcrumb?: Array<{ title: string; path?: string }>;
     extra?: React.ReactNode;
+    eyebrow?: string;
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
@@ -15,23 +17,29 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     subtitle,
     breadcrumb,
     extra,
+    eyebrow,
 }) => {
     return (
-        <div style={{ marginBottom: 24 }}>
+        <div className="gx-page-header">
             {breadcrumb && breadcrumb.length > 0 && (
                 <Breadcrumb
+                    className="gx-page-header__breadcrumb"
                     items={breadcrumb.map((item) => ({
-                        title: item.path ? <a href={item.path}>{item.title}</a> : item.title,
+                        title: item.path ? <Link to={item.path}>{item.title}</Link> : item.title,
                     }))}
-                    style={{ marginBottom: 8 }}
                 />
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {eyebrow && (
+                <Text className="gx-page-header__eyebrow">
+                    {eyebrow}
+                </Text>
+            )}
+            <div className="gx-page-header__row">
                 <div>
-                    <Title level={4} style={{ marginBottom: 0 }}>{title}</Title>
-                    {subtitle && <Text type="secondary">{subtitle}</Text>}
+                    <Title level={2} className="gx-page-header__title">{title}</Title>
+                    {subtitle && <Text className="gx-page-header__subtitle">{subtitle}</Text>}
                 </div>
-                {extra && <Space>{extra}</Space>}
+                {extra && <Space wrap className="gx-page-header__extra">{extra}</Space>}
             </div>
         </div>
     );

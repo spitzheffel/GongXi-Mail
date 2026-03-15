@@ -15,11 +15,9 @@ import {
     Tooltip,
     InputNumber,
     Progress,
-    Statistic,
     Row,
     Col,
     Badge,
-    Divider,
     DatePicker,
     Checkbox,
     Spin,
@@ -35,6 +33,7 @@ import {
     SearchOutlined,
 } from '@ant-design/icons';
 import { apiKeyApi, groupApi, emailApi } from '../../api';
+import { PageHeader, StatCard } from '../../components';
 import { getErrorMessage } from '../../utils/error';
 import { requestData } from '../../utils/request';
 import { LOG_ACTION_OPTIONS } from '../../constants/logActions';
@@ -433,10 +432,15 @@ const ApiKeysPage: React.FC = () => {
             dataIndex: 'name',
             key: 'name',
             render: (name, record) => (
-                <Space>
-                    <Text strong>{name}</Text>
-                    {record.status === 'DISABLED' && <Badge status="error" />}
-                </Space>
+                <div>
+                    <Space>
+                        <Text strong>{name}</Text>
+                        {record.status === 'DISABLED' && <Badge status="error" />}
+                    </Space>
+                    <Text type="secondary" style={{ display: 'block', marginTop: 6 }}>
+                        创建人 {record.createdByName || '系统'} · {dayjs(record.createdAt).format('YYYY-MM-DD')}
+                    </Text>
+                </div>
             ),
         },
         {
@@ -444,7 +448,7 @@ const ApiKeysPage: React.FC = () => {
             dataIndex: 'keyPrefix',
             key: 'keyPrefix',
             width: 120,
-            render: (text) => <Text code>{text}...</Text>,
+            render: (text) => <Text className="gx-code-pill">{text}...</Text>,
         },
         {
             title: '速率限制',
@@ -469,7 +473,7 @@ const ApiKeysPage: React.FC = () => {
             dataIndex: 'usageCount',
             key: 'usageCount',
             width: 100,
-            render: (val) => <Text type="secondary">{val?.toLocaleString() || 0}</Text>,
+            render: (val) => <Text strong>{val?.toLocaleString() || 0}</Text>,
         },
         {
             title: '过期时间',
@@ -621,126 +625,222 @@ const ApiKeysPage: React.FC = () => {
         [filteredEmailIdSet, selectedEmails]
     );
 
+    const activeKeysOnPage = useMemo(
+        () => data.filter((item) => item.status === 'ACTIVE').length,
+        [data]
+    );
+
+    const expiringSoonCount = useMemo(
+        () => data.filter((item) => item.expiresAt && dayjs(item.expiresAt).isAfter(dayjs()) && dayjs(item.expiresAt).diff(dayjs(), 'day') <= 7).length,
+        [data]
+    );
+
+    const currentPageUsage = useMemo(
+        () => data.reduce((sum, item) => sum + (item.usageCount || 0), 0),
+        [data]
+    );
+
+    const neverUsedCount = useMemo(
+        () => data.filter((item) => !item.lastUsedAt).length,
+        [data]
+    );
+
+    const enabledRate = data.length > 0 ? Math.round((activeKeysOnPage / data.length) * 100) : 0;
+
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                <Title level={4} style={{ margin: 0 }}>
-                    API Key 管理
-                </Title>
-                <Space>
-                    <Button icon={<ReloadOutlined />} onClick={fetchData}>
-                        刷新
-                    </Button>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                        创建 API Key
-                    </Button>
-                </Space>
-            </div>
-
-            <Table
-                columns={columns}
-                dataSource={data}
-                rowKey="id"
-                loading={loading}
-                pagination={tablePagination}
-                virtual
-                scroll={{ y: 560, x: 1200 }}
+            <PageHeader
+                eyebrow="Access Control"
+                title="API Key 管理"
+                subtitle="把权限边界、速率限制、邮箱池占用和白名单范围放进更聚焦的控制台视图里，便于快速判断风险和容量。"
+                extra={(
+                    <>
+                        <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>创建 API Key</Button>
+                    </>
+                )}
             />
+
+            <Card className="gx-hero-card gx-panel-card" bordered={false} style={{ marginBottom: 16 }}>
+                <Row gutter={[24, 24]} align="middle">
+                    <Col xs={24} xl={14}>
+                        <Text className="gx-hero-card__eyebrow">Permission Console</Text>
+                        <Title level={2} className="gx-hero-card__title">
+                            权限范围、速率上限和邮箱池使用情况集中查看。
+                        </Title>
+                        <Paragraph className="gx-hero-card__subtitle">
+                            这个页面现在优先暴露密钥的控制语义而不是单纯列表。你可以更快判断哪些 Key 需要收紧权限、哪些池子接近耗尽，以及哪些配置仍未实际使用。
+                        </Paragraph>
+                        <Space wrap className="gx-hero-card__actions">
+                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>新建 Key</Button>
+                            <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新列表</Button>
+                        </Space>
+                    </Col>
+                    <Col xs={24} xl={10}>
+                        <div className="gx-hero-card__metrics">
+                            <div className="gx-hero-signal">
+                                <Text className="gx-hero-signal__label">Current Page Enable Rate</Text>
+                                <Text className="gx-hero-signal__value">{enabledRate}%</Text>
+                                <Text className="gx-hero-signal__description">
+                                    当前页启用 {activeKeysOnPage} 个 Key，未使用 {neverUsedCount} 个，适合优先排查闲置或过宽授权。
+                                </Text>
+                            </div>
+                            <div className="gx-hero-signal__grid">
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">当前页调用量</Text>
+                                    <Text className="gx-hero-mini__value">{currentPageUsage}</Text>
+                                </div>
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">即将到期</Text>
+                                    <Text className="gx-hero-mini__value">{expiringSoonCount}</Text>
+                                </div>
+                            </div>
+                        </div>
+                    </Col>
+                </Row>
+            </Card>
+
+            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={12} md={6}>
+                    <StatCard title="Key 总量" value={total} icon={<ThunderboltOutlined />} iconBgColor="#0369A1" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="当前页启用" value={activeKeysOnPage} suffix={`/ ${data.length || 0}`} icon={<ReloadOutlined />} iconBgColor="#0F766E" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="活跃邮箱范围" value={allEmailOptions.length} icon={<DatabaseOutlined />} iconBgColor="#0EA5E9" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="分组白名单" value={groups.length} icon={<SearchOutlined />} iconBgColor="#f59e0b" />
+                </Col>
+            </Row>
+
+            <Card className="gx-panel-card gx-data-table" bordered={false}>
+                <div className="gx-ops-note" style={{ marginBottom: 18 }}>
+                    <Text className="gx-ops-note__label">Scope Rules</Text>
+                    <Text className="gx-ops-note__text">
+                        分组白名单决定可访问的大范围，邮箱白名单再做细粒度收口。单个 Key 的池重置和邮箱绑定在操作列中完成。
+                    </Text>
+                </div>
+                <Table
+                    className="gx-dashboard-table"
+                    columns={columns}
+                    dataSource={data}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={tablePagination}
+                    scroll={{ y: 560, x: 1200 }}
+                    locale={{ emptyText: '暂无 API Key 数据' }}
+                />
+            </Card>
 
             {/* 创建/编辑弹窗 */}
             <Modal
+                className="gx-console-modal"
                 title={editingId ? '编辑 API Key' : '创建 API Key'}
                 open={modalVisible}
                 onOk={handleSubmit}
                 onCancel={() => setModalVisible(false)}
                 destroyOnClose
-                width={500}
+                okText={editingId ? '保存更新' : '创建 Key'}
+                cancelText="取消"
+                width={720}
             >
                 <Spin spinning={apiKeyDetailLoading}>
-                <Form form={form} layout="vertical">
-                    <Form.Item
-                        name="name"
-                        label="名称"
-                        rules={[{ required: true, message: '请输入名称' }]}
-                    >
-                        <Input placeholder="例如：生产环境、测试环境" />
-                    </Form.Item>
-                    <Form.Item
-                        name="rateLimit"
-                        label="速率限制（每分钟请求数）"
-                        initialValue={60}
-                    >
-                        <InputNumber min={1} max={10000} style={{ width: '100%' }} />
-                    </Form.Item>
-                    <Form.Item
-                        name="expiresAt"
-                        label="过期时间（可选）"
-                    >
-                        <DatePicker
-                            style={{ width: '100%' }}
-                            placeholder="不设置则永不过期"
-                            disabledDate={(current) => current && current < dayjs().startOf('day')}
-                        />
-                    </Form.Item>
-                    {editingId && (
+                <div className="gx-modal-stack">
+                    <div className="gx-modal-section">
+                        <Text className="gx-modal-section__label">Access Boundary</Text>
+                        <Text className="gx-modal-section__text">
+                            先定义调用上限和权限，再决定允许访问的分组与邮箱范围。这样能把授权边界固定在创建阶段。
+                        </Text>
+                    </div>
+                    <Form form={form} layout="vertical">
+                        <Row gutter={[16, 0]}>
+                            <Col xs={24} md={12}>
+                                <Form.Item
+                                    name="name"
+                                    label="名称"
+                                    rules={[{ required: true, message: '请输入名称' }]}
+                                >
+                                    <Input placeholder="例如：生产环境、测试环境" />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12}>
+                                <Form.Item
+                                    name="rateLimit"
+                                    label="速率限制（每分钟请求数）"
+                                    initialValue={60}
+                                >
+                                    <InputNumber min={1} max={10000} style={{ width: '100%' }} />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12}>
+                                <Form.Item name="expiresAt" label="过期时间（可选）">
+                                    <DatePicker
+                                        style={{ width: '100%' }}
+                                        placeholder="不设置则永不过期"
+                                        disabledDate={(current) => current && current < dayjs().startOf('day')}
+                                    />
+                                </Form.Item>
+                            </Col>
+                            {editingId && (
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="status" label="状态">
+                                        <Select>
+                                            <Select.Option value="ACTIVE">启用</Select.Option>
+                                            <Select.Option value="DISABLED">禁用</Select.Option>
+                                        </Select>
+                                    </Form.Item>
+                                </Col>
+                            )}
+                        </Row>
                         <Form.Item
-                            name="status"
-                            label="状态"
+                            name="permissions"
+                            label="可调用接口权限"
+                            rules={[{ required: true, type: 'array', min: 1, message: '至少选择一个权限' }]}
                         >
-                            <Select>
-                                <Select.Option value="ACTIVE">启用</Select.Option>
-                                <Select.Option value="DISABLED">禁用</Select.Option>
-                            </Select>
+                            <Checkbox.Group options={permissionActionOptions} className="gx-permission-grid" />
                         </Form.Item>
-                    )}
-                    <Form.Item
-                        name="permissions"
-                        label="可调用接口权限"
-                        rules={[{ required: true, type: 'array', min: 1, message: '至少选择一个权限' }]}
-                    >
-                        <Checkbox.Group
-                            options={permissionActionOptions}
-                            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', rowGap: 8 }}
-                        />
-                    </Form.Item>
-                    <Form.Item
-                        name="allowedGroupIds"
-                        label="可用分组（可选）"
-                        tooltip="不选择表示不限制分组"
-                    >
-                        <Select
-                            mode="multiple"
-                            allowClear
-                            placeholder="默认：全部分组"
-                            options={emailGroupOptions}
-                            optionFilterProp="label"
-                            maxTagCount="responsive"
-                        />
-                    </Form.Item>
-                    <Form.Item
-                        name="allowedEmailIds"
-                        label="可用邮箱（可选）"
-                        tooltip="不选择表示使用分组范围内全部邮箱"
-                    >
-                        <Select
-                            mode="multiple"
-                            allowClear
-                            showSearch
-                            placeholder="默认：分组范围内全部邮箱"
-                            options={scopedAllowedEmailOptions}
-                            optionFilterProp="label"
-                            maxTagCount="responsive"
-                        />
-                    </Form.Item>
-                    <Text type="secondary">
-                        当前可选邮箱：{scopedAllowedEmailOptions.length}
-                    </Text>
-                </Form>
+                        <Form.Item
+                            name="allowedGroupIds"
+                            label="可用分组（可选）"
+                            tooltip="不选择表示不限制分组"
+                        >
+                            <Select
+                                mode="multiple"
+                                allowClear
+                                placeholder="默认：全部分组"
+                                options={emailGroupOptions}
+                                optionFilterProp="label"
+                                maxTagCount="responsive"
+                            />
+                        </Form.Item>
+                        <Form.Item
+                            name="allowedEmailIds"
+                            label="可用邮箱（可选）"
+                            tooltip="不选择表示使用分组范围内全部邮箱"
+                        >
+                            <Select
+                                mode="multiple"
+                                allowClear
+                                showSearch
+                                placeholder="默认：分组范围内全部邮箱"
+                                options={scopedAllowedEmailOptions}
+                                optionFilterProp="label"
+                                maxTagCount="responsive"
+                            />
+                        </Form.Item>
+                        <Text type="secondary">
+                            当前可选邮箱：{scopedAllowedEmailOptions.length}
+                        </Text>
+                    </Form>
+                </div>
                 </Spin>
             </Modal>
 
             {/* 新建 Key 显示弹窗 */}
             <Modal
+                className="gx-console-modal"
                 title="API Key 已创建"
                 open={newKeyModalVisible}
                 onOk={() => setNewKeyModalVisible(false)}
@@ -752,31 +852,28 @@ const ApiKeysPage: React.FC = () => {
                     </Button>,
                 ]}
             >
-                <Card>
-                    <Text type="warning" style={{ display: 'block', marginBottom: 16 }}>
-                        ⚠️ 请立即复制并妥善保存此 API Key，它不会再次显示！
+                <div className="gx-sensitive-token">
+                    <Tag color="warning">Sensitive</Tag>
+                    <Text style={{ display: 'block', marginTop: 12 }}>
+                        请立即复制并妥善保存此 API Key。出于安全原因，它不会再次显示。
                     </Text>
                     <Paragraph
+                        className="gx-sensitive-token__code"
                         copyable={{
                             text: newKey,
                             onCopy: () => message.success('已复制'),
                         }}
                         code
-                        style={{
-                            wordBreak: 'break-all',
-                            background: '#f5f5f5',
-                            padding: 12,
-                            borderRadius: 4,
-                        }}
                     >
                         {newKey}
                     </Paragraph>
-                </Card>
+                </div>
             </Modal>
 
             {/* 邮箱池弹窗 */}
             {poolModalVisible && (
                 <Modal
+                    className="gx-console-modal"
                     title={
                         <Space>
                             <DatabaseOutlined />
@@ -787,61 +884,50 @@ const ApiKeysPage: React.FC = () => {
                     onCancel={() => setPoolModalVisible(false)}
                     footer={null}
                     destroyOnClose
-                    width={500}
+                    width={560}
                 >
                     {poolLoading ? (
                         <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div>
                     ) : poolStats ? (
-                        <div>
-                            <div style={{ marginBottom: 16 }}>
-                                <Text type="secondary" style={{ marginRight: 8 }}>按分组筛选：</Text>
-                                <Select
-                                    allowClear
-                                    placeholder="全部分组"
-                                    style={{ width: 200 }}
-                                    value={poolGroupName}
-                                    options={poolGroupOptions}
-                                    onChange={(val: string | undefined) => handlePoolGroupChange(val)}
-                                />
+                        <div className="gx-modal-stack">
+                            <div className="gx-modal-section">
+                                <Text className="gx-modal-section__label">Pool Scope</Text>
+                                <Text className="gx-modal-section__text">
+                                    可按分组过滤当前 Key 的邮箱池使用情况，并在确认后重置该范围内的占用记录。
+                                </Text>
+                                <div style={{ marginTop: 16 }}>
+                                    <Text type="secondary" style={{ marginRight: 8 }}>按分组筛选：</Text>
+                                    <Select
+                                        allowClear
+                                        placeholder="全部分组"
+                                        style={{ width: 220 }}
+                                        value={poolGroupName}
+                                        options={poolGroupOptions}
+                                        onChange={(val: string | undefined) => handlePoolGroupChange(val)}
+                                    />
+                                </div>
                             </div>
-                            <Row gutter={16} style={{ marginBottom: 24 }}>
-                                <Col span={8}>
-                                    <div className="stat-blue">
-                                        <Statistic
-                                            title="总邮箱数"
-                                            value={poolStats.total}
-                                        />
-                                    </div>
-                                </Col>
-                                <Col span={8}>
-                                    <div className="stat-orange">
-                                        <Statistic
-                                            title="已使用"
-                                            value={poolStats.used}
-                                        />
-                                    </div>
-                                </Col>
-                                <Col span={8}>
-                                    <div className={poolStats.remaining > 0 ? 'stat-green' : 'stat-red'}>
-                                        <Statistic
-                                            title="剩余可用"
-                                            value={poolStats.remaining}
-                                        />
-                                    </div>
-                                </Col>
-                            </Row>
-                            <style>{`
-                                .stat-blue .ant-statistic-content-value { color: #1890ff; }
-                                .stat-orange .ant-statistic-content-value { color: #faad14; }
-                                .stat-green .ant-statistic-content-value { color: #52c41a; }
-                                .stat-red .ant-statistic-content-value { color: #ff4d4f; }
-                            `}</style>
-
-                            <div style={{ marginBottom: 24 }}>
-                                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                    使用进度
+                            <div className="gx-modal-inline-stats">
+                                <div className="gx-modal-inline-stat">
+                                    <Text className="gx-modal-inline-stat__label">总邮箱数</Text>
+                                    <Text className="gx-modal-inline-stat__value">{poolStats.total}</Text>
+                                </div>
+                                <div className="gx-modal-inline-stat">
+                                    <Text className="gx-modal-inline-stat__label">已使用</Text>
+                                    <Text className="gx-modal-inline-stat__value">{poolStats.used}</Text>
+                                </div>
+                                <div className="gx-modal-inline-stat">
+                                    <Text className="gx-modal-inline-stat__label">剩余可用</Text>
+                                    <Text className="gx-modal-inline-stat__value">{poolStats.remaining}</Text>
+                                </div>
+                            </div>
+                            <div className="gx-modal-section">
+                                <Text className="gx-modal-section__label">Usage Progress</Text>
+                                <Text className="gx-modal-section__text">
+                                    进度越接近 100%，说明当前范围内的邮箱池越接近耗尽，需要及时补充或执行重置。
                                 </Text>
                                 <Progress
+                                    style={{ marginTop: 14 }}
                                     percent={poolStats.total > 0 ? Math.round((poolStats.used / poolStats.total) * 100) : 0}
                                     status={poolStats.remaining === 0 ? 'exception' : 'active'}
                                     strokeColor={{
@@ -850,26 +936,22 @@ const ApiKeysPage: React.FC = () => {
                                     }}
                                 />
                             </div>
-
-                            <Divider />
-
-                            <div style={{ textAlign: 'center' }}>
-                                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-                                    重置后，此 API Key 可重新使用所有邮箱
+                            <div className="gx-ops-note gx-ops-note--warning">
+                                <Text className="gx-ops-note__label">Reset Pool</Text>
+                                <Text className="gx-ops-note__text">
+                                    重置后，此 API Key 将重新获得该范围内邮箱的可用资格。请确认没有正在依赖当前分配顺序的流程。
                                 </Text>
-                                <Popconfirm
-                                    title="确定要重置邮箱池吗？"
-                                    description={poolGroupName ? `仅重置分组 "${poolGroupName}" 的使用记录` : '重置后该 API Key 可重新使用所有邮箱'}
-                                    onConfirm={handleResetPool}
-                                >
-                                    <Button
-                                        type="primary"
-                                        danger
-                                        icon={<ThunderboltOutlined />}
+                                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                                    <Popconfirm
+                                        title="确定要重置邮箱池吗？"
+                                        description={poolGroupName ? `仅重置分组 "${poolGroupName}" 的使用记录` : '重置后该 API Key 可重新使用所有邮箱'}
+                                        onConfirm={handleResetPool}
                                     >
-                                        重置邮箱池
-                                    </Button>
-                                </Popconfirm>
+                                        <Button type="primary" danger icon={<ThunderboltOutlined />}>
+                                            重置邮箱池
+                                        </Button>
+                                    </Popconfirm>
+                                </div>
                             </div>
                         </div>
                     ) : (
@@ -883,6 +965,7 @@ const ApiKeysPage: React.FC = () => {
             {/* 邮箱管理弹窗 */}
             {emailModalVisible && (
                 <Modal
+                    className="gx-console-modal"
                     title={
                         <Space>
                             <ThunderboltOutlined />
@@ -896,16 +979,22 @@ const ApiKeysPage: React.FC = () => {
                     cancelText="取消"
                     confirmLoading={savingEmails}
                     destroyOnClose
-                    width={600}
+                    width={720}
                 >
                     {emailLoading ? (
                         <div style={{ textAlign: 'center', padding: 40 }}>
                             <Spin />
                         </div>
                     ) : (
-                        <div>
-                            <div style={{ marginBottom: 16 }}>
-                                <Space>
+                        <div className="gx-modal-stack">
+                            <div className="gx-modal-section">
+                                <Text className="gx-modal-section__label">Usage Marks</Text>
+                                <Text className="gx-modal-section__text">
+                                    勾选的邮箱表示该 API Key 已经使用过，不会再次自动分配。你可以按分组过滤后批量调整。
+                                </Text>
+                            </div>
+                            <div className="gx-ops-toolbar" style={{ marginBottom: 0 }}>
+                                <div className="gx-ops-toolbar__cluster">
                                     <Text type="secondary">按分组筛选：</Text>
                                     <Select
                                         allowClear
@@ -915,24 +1004,24 @@ const ApiKeysPage: React.FC = () => {
                                         options={emailGroupOptions}
                                         onChange={(val: number | undefined) => handleEmailGroupChange(val)}
                                     />
-                                </Space>
+                                </div>
                             </div>
-                            <div style={{ marginBottom: 16 }}>
-                                <Input
-                                    allowClear
-                                    value={emailKeyword}
-                                    onChange={(event) => setEmailKeyword(event.target.value)}
-                                    prefix={<SearchOutlined />}
-                                    placeholder="搜索邮箱或分组"
-                                />
-                            </div>
-                            <div style={{ marginBottom: 16 }}>
-                                <Text type="secondary">
-                                    勾选的邮箱表示该 API Key 已使用过（不会再自动分配）
-                                </Text>
-                            </div>
-                            <div style={{ marginBottom: 16 }}>
-                                <Space>
+                            <Input
+                                allowClear
+                                value={emailKeyword}
+                                onChange={(event) => setEmailKeyword(event.target.value)}
+                                prefix={<SearchOutlined />}
+                                placeholder="搜索邮箱或分组"
+                            />
+                            <div className="gx-ops-selection" style={{ marginBottom: 0 }}>
+                                <div className="gx-ops-selection__copy">
+                                    <Text className="gx-ops-selection__label">Selection</Text>
+                                    <Text className="gx-ops-selection__text">
+                                        已选择 {selectedEmails.length} / {emailList.length}
+                                        {`（当前筛选 ${selectedInFilteredCount} / ${filteredEmailList.length}）`}
+                                    </Text>
+                                </div>
+                                <Space wrap>
                                     <Button
                                         size="small"
                                         onClick={() => {
@@ -952,27 +1041,25 @@ const ApiKeysPage: React.FC = () => {
                                     >
                                         清空当前筛选
                                     </Button>
-                                    <Text type="secondary">
-                                        已选择 {selectedEmails.length} / {emailList.length}
-                                        {`（当前筛选 ${selectedInFilteredCount} / ${filteredEmailList.length}）`}
-                                    </Text>
                                 </Space>
                             </div>
-                            <div style={{ maxHeight: 400, overflow: 'auto', border: '1px solid #f0f0f0', borderRadius: 4, padding: 12 }}>
+                            <div className="gx-checkbox-grid">
                                 <Checkbox.Group
                                     value={selectedEmails}
                                     onChange={(vals) => setSelectedEmails(vals as number[])}
                                     style={{ width: '100%' }}
                                 >
-                                    <Row>
+                                    <Row gutter={[12, 12]}>
                                         {filteredEmailList.map((email: { id: number; email: string; used: boolean; groupId: number | null; groupName: string | null }) => (
-                                            <Col span={12} key={email.id} style={{ marginBottom: 8 }}>
-                                                <Checkbox value={email.id}>
-                                                    {email.email}
-                                                    {email.groupName && (
-                                                        <Tag color="blue" style={{ marginLeft: 4, fontSize: 11 }}>{email.groupName}</Tag>
-                                                    )}
-                                                </Checkbox>
+                                            <Col xs={24} md={12} key={email.id}>
+                                                <div className="gx-checkbox-grid__item">
+                                                    <Checkbox value={email.id}>
+                                                        {email.email}
+                                                        {email.groupName && (
+                                                            <Tag color="processing" style={{ marginLeft: 6 }}>{email.groupName}</Tag>
+                                                        )}
+                                                    </Checkbox>
+                                                </div>
                                             </Col>
                                         ))}
                                     </Row>

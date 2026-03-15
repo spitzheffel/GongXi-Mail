@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     Layout,
     Menu,
     Avatar,
     Dropdown,
-    theme,
     Typography,
-    Space,
     Breadcrumb,
+    Button,
+    Tag,
+    Drawer,
+    Grid,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -22,41 +24,51 @@ import {
     MenuUnfoldOutlined,
     FileTextOutlined,
     HistoryOutlined,
+    SafetyCertificateOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuthStore } from '../stores/authStore';
 import { authApi } from '../api';
 import { isSuperAdmin } from '../utils/auth';
 
 const { Header, Sider, Content } = Layout;
-const { Text } = Typography;
+const { Text, Title } = Typography;
+const { useBreakpoint } = Grid;
 
 const menuConfig = [
-    { key: '/dashboard', icon: <DashboardOutlined />, label: '数据概览', title: '数据概览' },
-    { key: '/emails', icon: <MailOutlined />, label: '邮箱管理', title: '邮箱管理' },
-    { key: '/api-keys', icon: <KeyOutlined />, label: 'API Key', title: 'API Key 管理' },
-    { key: '/api-docs', icon: <FileTextOutlined />, label: 'API 文档', title: 'API 文档' },
-    { key: '/operation-logs', icon: <HistoryOutlined />, label: '操作日志', title: '操作日志' },
-    { key: '/admins', icon: <UserOutlined />, label: '管理员', title: '管理员管理', superAdmin: true },
-    { key: '/settings', icon: <SettingOutlined />, label: '系统设置', title: '系统设置' },
+    { key: '/dashboard', icon: <DashboardOutlined />, title: '数据概览', description: '总览邮箱池、调用活跃度和系统健康度' },
+    { key: '/emails', icon: <MailOutlined />, title: '邮箱管理', description: '维护邮箱池、分组策略和收信操作' },
+    { key: '/api-keys', icon: <KeyOutlined />, title: 'API Key 管理', description: '控制权限边界、速率限制和池分配' },
+    { key: '/api-docs', icon: <FileTextOutlined />, title: 'API 文档', description: '查看接口用法、调用示例和参数说明' },
+    { key: '/operation-logs', icon: <HistoryOutlined />, title: '操作日志', description: '审计分配、拉信和清理行为的执行轨迹' },
+    { key: '/admins', icon: <UserOutlined />, title: '管理员管理', description: '管理后台账号与角色边界', superAdmin: true },
+    { key: '/settings', icon: <SettingOutlined />, title: '系统设置', description: '维护个人安全设置和二次验证' },
 ];
 
 const MainLayout: React.FC = () => {
     const [collapsed, setCollapsed] = useState(false);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const { admin, clearAuth } = useAuthStore();
-    const { token } = theme.useToken();
+    const screens = useBreakpoint();
 
     const hasSuperAdminPermission = isSuperAdmin(admin?.role);
+    const isMobile = !screens.lg;
     const displayName = admin?.username?.trim() || 'Admin';
     const avatarText = displayName.charAt(0).toUpperCase();
-    const menuItems: MenuProps['items'] = menuConfig
-        .filter(item => !item.superAdmin || hasSuperAdminPermission)
-        .map(item => ({
-            key: item.key,
-            icon: item.icon,
-            label: <Link to={item.key}>{item.label}</Link>,
-        }));
+
+    const availableMenu = useMemo(
+        () => menuConfig.filter((item) => !item.superAdmin || hasSuperAdminPermission),
+        [hasSuperAdminPermission]
+    );
+
+    const currentMenu = availableMenu.find((item) =>
+        location.pathname === item.key || location.pathname.startsWith(`${item.key}/`)
+    );
+
+    const selectedKeys = currentMenu ? [currentMenu.key] : [];
+    const sidebarOffset = isMobile ? 0 : (collapsed ? 128 : 312);
 
     const handleLogout = async () => {
         try {
@@ -66,6 +78,13 @@ const MainLayout: React.FC = () => {
         }
         clearAuth();
         navigate('/login');
+    };
+
+    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+        navigate(String(key));
+        if (isMobile) {
+            setMobileNavOpen(false);
+        }
     };
 
     const userMenuItems: MenuProps['items'] = [
@@ -85,119 +104,147 @@ const MainLayout: React.FC = () => {
         },
     ];
 
-    const currentMenu = menuConfig.find(item => location.pathname.startsWith(item.key));
-    const pageTitle = currentMenu?.title || '管理后台';
+    const menuItems: MenuProps['items'] = availableMenu.map((item) => ({
+        key: item.key,
+        icon: item.icon,
+        label: (
+            <div className="gx-shell__menu-copy">
+                <span className="gx-shell__menu-label">{item.title}</span>
+                {(!collapsed || isMobile) && (
+                    <span className="gx-shell__menu-hint">{item.description}</span>
+                )}
+            </div>
+        ),
+    }));
 
-    const selectedKeys = menuConfig
-        .filter(item => location.pathname.startsWith(item.key))
-        .map(item => item.key);
+    const navigationContent = (
+        <div className="gx-shell__nav">
+            <div className={`gx-shell__brand ${collapsed && !isMobile ? 'is-collapsed' : ''}`}>
+                <div className="gx-shell__brand-mark">GX</div>
+                {(!collapsed || isMobile) && (
+                    <div className="gx-shell__brand-copy">
+                        <Title level={5} className="gx-shell__brand-title">GongXi Mail</Title>
+                        <Text className="gx-shell__brand-subtitle">Secure mail operations console</Text>
+                    </div>
+                )}
+            </div>
+
+            {(!collapsed || isMobile) && (
+                <div className="gx-shell__status-card">
+                    <Text className="gx-shell__status-label">Command Layer</Text>
+                    <Text className="gx-shell__status-value">
+                        聚合邮箱池、API 调度和审计日志，适合高频运营和故障排查。
+                    </Text>
+                    <div className="gx-shell__status-meta">
+                        <Tag color="cyan">2FA Ready</Tag>
+                        <Tag color="green">Traceable</Tag>
+                    </div>
+                </div>
+            )}
+
+            <Menu
+                className="gx-shell__menu"
+                theme="dark"
+                mode="inline"
+                selectedKeys={selectedKeys}
+                items={menuItems}
+                onClick={handleMenuClick}
+            />
+
+            {(!collapsed || isMobile) && (
+                <div className="gx-shell__footer-note">
+                    <Text className="gx-shell__footer-note-label">Ops Signal</Text>
+                    <Text className="gx-shell__footer-note-text">
+                        当前会话已进入受保护后台，建议保持二次验证开启。
+                    </Text>
+                </div>
+            )}
+        </div>
+    );
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
-            <Sider
-                trigger={null}
-                collapsible
-                collapsed={collapsed}
-                theme="light"
-                width={208}
-                style={{
-                    overflow: 'auto',
-                    height: '100vh',
-                    position: 'fixed',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    borderRight: '1px solid #f0f0f0',
-                }}
+        <Layout className="gx-shell">
+            {!isMobile && (
+                <Sider
+                    className="gx-shell__sider"
+                    trigger={null}
+                    collapsible
+                    collapsed={collapsed}
+                    width={280}
+                    collapsedWidth={96}
+                    theme="dark"
+                >
+                    {navigationContent}
+                </Sider>
+            )}
+
+            <Drawer
+                placement="left"
+                open={isMobile && mobileNavOpen}
+                onClose={() => setMobileNavOpen(false)}
+                closable={false}
+                width={300}
+                rootClassName="gx-shell__drawer"
             >
-                <div
-                    style={{
-                        height: 64,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderBottom: '1px solid #f0f0f0',
-                    }}
-                >
-                    <Space>
-                        <div
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: 8,
-                                background: '#1890ff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 600,
+                {navigationContent}
+            </Drawer>
+
+            <Layout className="gx-shell__main" style={{ marginLeft: sidebarOffset }}>
+                <Header className="gx-shell__header">
+                    <div className="gx-shell__header-left">
+                        <Button
+                            type="text"
+                            className="gx-shell__toggle"
+                            icon={isMobile ? <MenuUnfoldOutlined /> : (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />)}
+                            onClick={() => {
+                                if (isMobile) {
+                                    setMobileNavOpen(true);
+                                    return;
+                                }
+                                setCollapsed((prev) => !prev);
                             }}
-                        >
-                            GX
-                        </div>
-                        {!collapsed && (
-                            <Text strong style={{ fontSize: 16 }}>廾匸邮箱</Text>
-                        )}
-                    </Space>
-                </div>
-                <Menu
-                    theme="light"
-                    mode="inline"
-                    selectedKeys={selectedKeys}
-                    items={menuItems}
-                    style={{ borderRight: 0, marginTop: 8 }}
-                />
-            </Sider>
-
-            <Layout style={{ marginLeft: collapsed ? 80 : 208, transition: 'margin-left 0.2s ease' }}>
-                <Header
-                    style={{
-                        padding: '0 24px',
-                        background: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        borderBottom: '1px solid #f0f0f0',
-                        height: 56,
-                        lineHeight: '56px',
-                    }}
-                >
-                    <Space>
-                        <span
-                            onClick={() => setCollapsed(!collapsed)}
-                            style={{ fontSize: 16, cursor: 'pointer', color: '#595959' }}
-                        >
-                            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        </span>
-                        <Breadcrumb
-                            items={[
-                                { title: '首页' },
-                                { title: pageTitle },
-                            ]}
-                            style={{ marginLeft: 16 }}
+                            aria-label="切换导航"
                         />
-                    </Space>
+                        <div className="gx-shell__header-copy">
+                            <Breadcrumb
+                                className="gx-shell__header-breadcrumb"
+                                items={[
+                                    { title: '控制台' },
+                                    { title: currentMenu?.title || '管理后台' },
+                                ]}
+                            />
+                            <Text className="gx-shell__header-note">
+                                {currentMenu?.description || '统一管理邮箱资源、API 权限和操作轨迹。'}
+                            </Text>
+                        </div>
+                    </div>
 
-                    <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-                        <Space style={{ cursor: 'pointer' }}>
-                            <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
-                                {avatarText}
-                            </Avatar>
-                            <Text>{displayName}</Text>
-                        </Space>
-                    </Dropdown>
+                    <div className="gx-shell__header-right">
+                        <div className="gx-shell__header-chip">
+                            <Text className="gx-shell__header-chip-label">Session</Text>
+                            <Text className="gx-shell__header-chip-value">{dayjs().format('YYYY/MM/DD')}</Text>
+                        </div>
+                        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
+                            <button type="button" className="gx-shell__profile">
+                                <Avatar size={40} style={{ backgroundColor: '#0369A1' }}>
+                                    {avatarText}
+                                </Avatar>
+                                <div className="gx-shell__profile-copy">
+                                    <Text className="gx-shell__profile-name">{displayName}</Text>
+                                    <Text className="gx-shell__profile-role">
+                                        {hasSuperAdminPermission ? 'SUPER ADMIN' : 'ADMIN OPERATOR'}
+                                    </Text>
+                                </div>
+                                <SafetyCertificateOutlined style={{ color: '#0369A1' }} />
+                            </button>
+                        </Dropdown>
+                    </div>
                 </Header>
 
-                <Content
-                    style={{
-                        margin: 24,
-                        padding: 24,
-                        background: '#fff',
-                        borderRadius: token.borderRadiusLG,
-                        minHeight: 'calc(100vh - 56px - 48px)',
-                    }}
-                >
-                    <Outlet />
+                <Content className="gx-shell__content">
+                    <div className="gx-shell__content-inner">
+                        <Outlet />
+                    </div>
                 </Content>
             </Layout>
         </Layout>

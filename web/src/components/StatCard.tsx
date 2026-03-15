@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type CSSProperties } from 'react';
 import { Card, Space, Typography } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
@@ -25,6 +25,10 @@ const StatCard: React.FC<StatCardProps> = ({
     suffix,
     loading = false,
 }) => {
+    const cardStyle = {
+        '--gx-stat-accent': iconBgColor,
+    } as CSSProperties;
+
     const renderTrend = () => {
         if (trend === undefined) return null;
 
@@ -33,13 +37,13 @@ const StatCard: React.FC<StatCardProps> = ({
         const Icon = isUp ? ArrowUpOutlined : ArrowDownOutlined;
 
         return (
-            <Space size={4} style={{ marginTop: 8 }}>
+            <Space size={4} className="gx-stat-card__trend">
                 <Icon style={{ color, fontSize: 12 }} />
                 <Text style={{ color, fontSize: 12 }}>
                     {Math.abs(trend)}%
                 </Text>
                 {trendLabel && (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <Text className="gx-stat-card__trend-label">
                         {trendLabel}
                     </Text>
                 )}
@@ -49,32 +53,23 @@ const StatCard: React.FC<StatCardProps> = ({
 
     return (
         <Card
+            className="gx-stat-card"
             bordered={false}
             loading={loading}
+            style={cardStyle}
             styles={{ body: { padding: '20px 24px' } }}
         >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <Text type="secondary" style={{ fontSize: 14 }}>{title}</Text>
-                    <div style={{ fontSize: 28, fontWeight: 600, marginTop: 4 }}>
-                        {value}{suffix && <span style={{ fontSize: 14, marginLeft: 4 }}>{suffix}</span>}
+            <div className="gx-stat-card__inner">
+                <div className="gx-stat-card__meta">
+                    <Text className="gx-stat-card__title">{title}</Text>
+                    <div className="gx-stat-card__value">
+                        {value}
+                        {suffix && <span className="gx-stat-card__suffix">{suffix}</span>}
                     </div>
                     {renderTrend()}
                 </div>
                 {icon && (
-                    <div
-                        style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 12,
-                            backgroundColor: iconBgColor,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 24,
-                            color: '#fff',
-                        }}
-                    >
+                    <div className="gx-stat-card__icon" style={{ backgroundColor: iconBgColor }}>
                         {icon}
                     </div>
                 )}

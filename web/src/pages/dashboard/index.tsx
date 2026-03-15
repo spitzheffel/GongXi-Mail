@@ -1,17 +1,20 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Row, Col, Card, Table, Tag, Typography, Spin } from 'antd';
-import { Link } from 'react-router-dom';
+import { Row, Col, Card, Table, Tag, Typography, Spin, Button, Space, Progress } from 'antd';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     MailOutlined,
     KeyOutlined,
     CheckCircleOutlined,
     ApiOutlined,
+    ThunderboltOutlined,
+    HistoryOutlined,
+    ArrowRightOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { StatCard, PageHeader } from '../../components';
 import { dashboardApi, emailApi, apiKeyApi } from '../../api';
-import dayjs from 'dayjs';
 
-const { Text } = Typography;
+const { Text, Title, Paragraph } = Typography;
 
 const LineChart = lazy(async () => {
     const mod = await import('@ant-design/charts');
@@ -57,6 +60,7 @@ interface ApiTrendItem {
 }
 
 const DashboardPage: React.FC = () => {
+    const navigate = useNavigate();
     const [coreLoading, setCoreLoading] = useState(true);
     const [trendLoading, setTrendLoading] = useState(true);
     const [chartsReady, setChartsReady] = useState(false);
@@ -109,13 +113,15 @@ const DashboardPage: React.FC = () => {
 
         if (typeof idleWindow.requestIdleCallback === 'function') {
             idleId = idleWindow.requestIdleCallback(() => {
-                if (disposed) return;
-                setChartsReady(true);
+                if (!disposed) {
+                    setChartsReady(true);
+                }
             }, { timeout: 1200 });
         } else {
             timerId = window.setTimeout(() => {
-                if (disposed) return;
-                setChartsReady(true);
+                if (!disposed) {
+                    setChartsReady(true);
+                }
             }, 350);
         }
 
@@ -155,6 +161,7 @@ const DashboardPage: React.FC = () => {
         if (!chartsReady || !chartsInView || trendRequestedRef.current) {
             return;
         }
+
         trendRequestedRef.current = true;
         let cancelled = false;
 
@@ -190,7 +197,7 @@ const DashboardPage: React.FC = () => {
             title: '状态',
             dataIndex: 'status',
             key: 'status',
-            width: 80,
+            width: 88,
             render: (status: string) => {
                 const config: Record<string, { color: string; text: string }> = {
                     ACTIVE: { color: 'success', text: '正常' },
@@ -204,7 +211,7 @@ const DashboardPage: React.FC = () => {
             title: '添加时间',
             dataIndex: 'createdAt',
             key: 'createdAt',
-            width: 120,
+            width: 126,
             render: (val: string) => dayjs(val).format('MM-DD HH:mm'),
         },
     ];
@@ -220,14 +227,14 @@ const DashboardPage: React.FC = () => {
             title: '使用次数',
             dataIndex: 'usageCount',
             key: 'usageCount',
-            width: 100,
+            width: 116,
             render: (val: number) => <Text strong>{(val || 0).toLocaleString()}</Text>,
         },
         {
             title: '状态',
             dataIndex: 'status',
             key: 'status',
-            width: 80,
+            width: 88,
             render: (status: string) => (
                 <Tag color={status === 'ACTIVE' ? 'success' : 'default'}>
                     {status === 'ACTIVE' ? '启用' : '禁用'}
@@ -236,7 +243,6 @@ const DashboardPage: React.FC = () => {
         },
     ];
 
-    // 图表配置
     const lineConfig = useMemo(() => ({
         data: apiTrend,
         xField: 'date',
@@ -244,9 +250,9 @@ const DashboardPage: React.FC = () => {
         smooth: true,
         height: 280,
         point: { size: 4, shape: 'circle' },
-        color: '#1890ff',
+        color: '#0369A1',
         areaStyle: {
-            fill: 'l(270) 0:#ffffff 1:#1890ff20',
+            fill: 'l(270) 0:#ffffff 1:#0ea5e930',
         },
         xAxis: {
             label: {
@@ -255,11 +261,16 @@ const DashboardPage: React.FC = () => {
         },
     }), [apiTrend]);
 
+    const statsData: Stats = stats || {
+        apiKeys: { total: 0, active: 0, totalUsage: 0, todayActive: 0 },
+        emails: { total: 0, active: 0, error: 0 },
+    };
+
     const pieData = useMemo(() => (stats ? [
         { type: '正常', value: stats.emails.active },
         { type: '异常', value: stats.emails.error },
         { type: '禁用', value: Math.max(0, stats.emails.total - stats.emails.active - stats.emails.error) },
-    ].filter(d => d.value > 0) : []), [stats]);
+    ].filter((d) => d.value > 0) : []), [stats]);
 
     const pieConfig = useMemo(() => ({
         data: pieData,
@@ -268,7 +279,7 @@ const DashboardPage: React.FC = () => {
         height: 280,
         radius: 0.8,
         innerRadius: 0.6,
-        color: ['#52c41a', '#ff4d4f', '#d9d9d9'],
+        color: ['#22c55e', '#ef4444', '#bae6fd'],
         label: {
             type: 'inner',
             offset: '-50%',
@@ -277,27 +288,110 @@ const DashboardPage: React.FC = () => {
         },
         statistic: {
             title: { content: '邮箱' },
-            content: { content: stats?.emails.total?.toString() || '0' },
+            content: { content: statsData.emails.total.toString() },
         },
-    }), [pieData, stats]);
+    }), [pieData, statsData.emails.total]);
 
-    const statsData: Stats = stats || {
-        apiKeys: { total: 0, active: 0, totalUsage: 0, todayActive: 0 },
-        emails: { total: 0, active: 0, error: 0 },
-    };
+    const mailboxHealth = statsData.emails.total > 0
+        ? Math.round((statsData.emails.active / statsData.emails.total) * 100)
+        : 0;
+    const apiKeyActivity = statsData.apiKeys.total > 0
+        ? Math.round((statsData.apiKeys.active / statsData.apiKeys.total) * 100)
+        : 0;
+
+    const actionCards = [
+        {
+            key: 'emails',
+            title: '邮箱池调度',
+            description: '集中维护账号、分组和邮件查看，适合高频验证场景。',
+            metricLabel: 'Active',
+            metricValue: `${statsData.emails.active}/${statsData.emails.total || 0}`,
+            icon: <MailOutlined />,
+            path: '/emails',
+        },
+        {
+            key: 'api-keys',
+            title: 'API 权限边界',
+            description: '管理调用速率、权限粒度和邮箱池占用策略。',
+            metricLabel: 'Usage',
+            metricValue: statsData.apiKeys.totalUsage.toLocaleString(),
+            icon: <ThunderboltOutlined />,
+            path: '/api-keys',
+        },
+        {
+            key: 'logs',
+            title: '操作审计',
+            description: '回看 get-email、拉信与清空操作，快速定位异常行为。',
+            metricLabel: 'Today',
+            metricValue: statsData.apiKeys.todayActive.toString(),
+            icon: <HistoryOutlined />,
+            path: '/operation-logs',
+        },
+    ];
 
     return (
         <div>
-            <PageHeader title="数据概览" subtitle="实时监控系统运行状态" />
+            <PageHeader
+                eyebrow="Operations Console"
+                title="数据概览"
+                subtitle="把邮箱池可用率、API 活跃度和审计趋势压缩到一个更聚焦的首页，让排障和运维判断更快。"
+                extra={(
+                    <>
+                        <Button onClick={() => navigate('/emails')}>邮箱池</Button>
+                        <Button type="primary" onClick={() => navigate('/operation-logs')}>查看审计</Button>
+                    </>
+                )}
+            />
 
-            {/* 统计卡片 */}
+            <Card className="gx-hero-card gx-panel-card" bordered={false}>
+                <Row gutter={[24, 24]} align="middle">
+                    <Col xs={24} xl={14}>
+                        <Text className="gx-hero-card__eyebrow">Command Overview</Text>
+                        <Title level={2} className="gx-hero-card__title">
+                            邮箱资源、API 调度与审计状态都在首屏。
+                        </Title>
+                        <Paragraph className="gx-hero-card__subtitle">
+                            这个首页现在更偏向控制台而不是普通后台列表页。关键判断点被前置：健康度、活跃度、分布趋势和最近变更一眼可读。
+                        </Paragraph>
+                        <Space wrap className="gx-hero-card__actions">
+                            <Button type="primary" icon={<MailOutlined />} onClick={() => navigate('/emails')}>管理邮箱池</Button>
+                            <Button icon={<KeyOutlined />} onClick={() => navigate('/api-keys')}>管理 API Key</Button>
+                        </Space>
+                    </Col>
+                    <Col xs={24} xl={10}>
+                        <div className="gx-hero-card__metrics">
+                            <div className="gx-hero-signal">
+                                <Text className="gx-hero-signal__label">Mailbox Health</Text>
+                                <Text className="gx-hero-signal__value">{mailboxHealth}%</Text>
+                                <Progress percent={mailboxHealth} showInfo={false} strokeColor="#22c55e" trailColor="#d7eff9" />
+                                <Text className="gx-hero-signal__description">
+                                    {statsData.emails.error > 0
+                                        ? `当前有 ${statsData.emails.error} 个异常邮箱需要优先处理。`
+                                        : '当前没有异常邮箱，邮箱池处于稳定状态。'}
+                                </Text>
+                            </div>
+                            <div className="gx-hero-signal__grid">
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">今日活跃 Key</Text>
+                                    <Text className="gx-hero-mini__value">{statsData.apiKeys.todayActive}</Text>
+                                </div>
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">Key 活跃率</Text>
+                                    <Text className="gx-hero-mini__value">{apiKeyActivity}%</Text>
+                                </div>
+                            </div>
+                        </div>
+                    </Col>
+                </Row>
+            </Card>
+
             <Row gutter={[16, 16]}>
                 <Col xs={12} sm={12} md={6}>
                     <StatCard
                         title="邮箱总数"
                         value={statsData.emails.total}
                         icon={<MailOutlined />}
-                        iconBgColor="#1890ff"
+                        iconBgColor="#0369A1"
                     />
                 </Col>
                 <Col xs={12} sm={12} md={6}>
@@ -305,7 +399,7 @@ const DashboardPage: React.FC = () => {
                         title="正常邮箱"
                         value={statsData.emails.active}
                         icon={<CheckCircleOutlined />}
-                        iconBgColor="#52c41a"
+                        iconBgColor="#22C55E"
                         suffix={`/ ${statsData.emails.total}`}
                     />
                 </Col>
@@ -314,7 +408,7 @@ const DashboardPage: React.FC = () => {
                         title="API 调用总数"
                         value={statsData.apiKeys.totalUsage}
                         icon={<ApiOutlined />}
-                        iconBgColor="#722ed1"
+                        iconBgColor="#0EA5E9"
                     />
                 </Col>
                 <Col xs={12} sm={12} md={6}>
@@ -322,35 +416,55 @@ const DashboardPage: React.FC = () => {
                         title="活跃 API Key"
                         value={statsData.apiKeys.active}
                         icon={<KeyOutlined />}
-                        iconBgColor="#fa8c16"
+                        iconBgColor="#0F766E"
                         suffix={`/ ${statsData.apiKeys.total}`}
                     />
                 </Col>
             </Row>
 
-            {/* 图表区域 */}
+            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                {actionCards.map((item) => (
+                    <Col key={item.key} xs={24} md={8}>
+                        <Link to={item.path} className="gx-action-card">
+                            <Card bordered={false}>
+                                <div className="gx-action-card__icon">{item.icon}</div>
+                                <Text className="gx-action-card__title">{item.title}</Text>
+                                <Text className="gx-action-card__desc">{item.description}</Text>
+                                <div className="gx-action-card__meta">
+                                    <div>
+                                        <Text className="gx-action-card__meta-label">{item.metricLabel}</Text>
+                                        <Text className="gx-action-card__meta-value">{item.metricValue}</Text>
+                                    </div>
+                                    <ArrowRightOutlined style={{ color: '#0369A1' }} />
+                                </div>
+                            </Card>
+                        </Link>
+                    </Col>
+                ))}
+            </Row>
+
             <Row gutter={[16, 16]} style={{ marginTop: 16 }} ref={chartsSectionRef}>
                 <Col xs={24} md={16}>
-                    <Card title="API 调用趋势（近7天）" bordered={false}>
+                    <Card title="API 调用趋势（近 7 天）" bordered={false} className="gx-panel-card">
                         {!chartsReady || !chartsInView || trendLoading ? (
-                            <div style={{ textAlign: 'center', padding: 40, minHeight: 280 }}><Spin /></div>
+                            <div className="gx-dashboard-empty"><Spin /></div>
                         ) : (
-                            <Suspense fallback={<div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>}>
+                            <Suspense fallback={<div className="gx-dashboard-empty"><Spin /></div>}>
                                 <LineChart {...lineConfig} />
                             </Suspense>
                         )}
                     </Card>
                 </Col>
                 <Col xs={24} md={8}>
-                    <Card title="邮箱状态分布" bordered={false}>
+                    <Card title="邮箱状态分布" bordered={false} className="gx-panel-card">
                         {coreLoading || !chartsReady || !chartsInView ? (
-                            <div style={{ textAlign: 'center', padding: 40, minHeight: 280 }}><Spin /></div>
+                            <div className="gx-dashboard-empty"><Spin /></div>
                         ) : pieData.length > 0 ? (
-                            <Suspense fallback={<div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>}>
+                            <Suspense fallback={<div className="gx-dashboard-empty"><Spin /></div>}>
                                 <PieChart {...pieConfig} />
                             </Suspense>
                         ) : (
-                            <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="gx-dashboard-empty">
                                 <Text type="secondary">暂无数据</Text>
                             </div>
                         )}
@@ -358,13 +472,13 @@ const DashboardPage: React.FC = () => {
                 </Col>
             </Row>
 
-            {/* 列表区域 */}
             <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                 <Col xs={24} md={12}>
                     <Card
                         title="最近添加的邮箱"
                         bordered={false}
-                        bodyStyle={{ padding: 0 }}
+                        className="gx-panel-card gx-dashboard-table"
+                        styles={{ body: { padding: 0 } }}
                         extra={<Link to="/emails">查看全部</Link>}
                     >
                         <Table
@@ -382,7 +496,8 @@ const DashboardPage: React.FC = () => {
                     <Card
                         title="API Key 使用排行"
                         bordered={false}
-                        bodyStyle={{ padding: 0 }}
+                        className="gx-panel-card gx-dashboard-table"
+                        styles={{ body: { padding: 0 } }}
                         extra={<Link to="/api-keys">查看全部</Link>}
                     >
                         <Table

@@ -17,7 +17,7 @@ const AdminsPage = lazy(() => import('./pages/admins'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
 const PageFallback: React.FC = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240 }}>
+  <div className="gx-page-fallback">
     <Spin />
   </div>
 );
@@ -61,8 +61,14 @@ const App: React.FC = () => {
       theme={{
         cssVar: {},
         token: {
-          colorPrimary: '#1890ff',
-          borderRadius: 6,
+          colorPrimary: '#0369A1',
+          colorInfo: '#0EA5E9',
+          colorSuccess: '#22C55E',
+          colorWarning: '#F59E0B',
+          colorError: '#EF4444',
+          borderRadius: 18,
+          fontFamily: '"Fira Sans", "Segoe UI", sans-serif',
+          fontFamilyCode: '"Fira Code", "SFMono-Regular", monospace',
         },
       }}
     >

@@ -1,42 +1,49 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Table,
     Button,
-    Space,
-    Modal,
+    Card,
+    Col,
     Form,
     Input,
-    Select,
-    message,
+    List,
+    Modal,
     Popconfirm,
+    Row,
+    Select,
+    Space,
+    Spin,
+    Table,
+    Tabs,
     Tag,
+    Tooltip,
     Typography,
     Upload,
-    Tooltip,
-    List,
-    Tabs,
-    Spin,
+    message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
-    PlusOutlined,
-    EditOutlined,
     DeleteOutlined,
-    UploadOutlined,
     DownloadOutlined,
-    InboxOutlined,
-    SearchOutlined,
-    MailOutlined,
+    EditOutlined,
     GroupOutlined,
+    InboxOutlined,
+    MailOutlined,
+    PlusOutlined,
+    ReloadOutlined,
+    SearchOutlined,
+    SyncOutlined,
+    UploadOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { PageHeader, StatCard } from '../../components';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
 import { requestData } from '../../utils/request';
-import dayjs from 'dayjs';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Dragger } = Upload;
+
 const MAIL_FETCH_STRATEGY_OPTIONS = [
     { value: 'GRAPH_FIRST', label: 'Graph 优先（失败回退 IMAP）' },
     { value: 'IMAP_FIRST', label: 'IMAP 优先（失败回退 Graph）' },
@@ -127,6 +134,12 @@ const formatMailboxPath = (folder: MailboxFolder): string => {
         .join(' / ');
 };
 
+const EMAIL_STATUS_META: Record<'ACTIVE' | 'ERROR' | 'DISABLED', { color: string; label: string }> = {
+    ACTIVE: { color: 'success', label: '正常' },
+    ERROR: { color: 'error', label: '异常' },
+    DISABLED: { color: 'default', label: '禁用' },
+};
+
 interface EmailGroup {
     id: number;
     name: string;
@@ -205,20 +218,18 @@ const EmailsPage: React.FC = () => {
     const [currentEmailId, setCurrentEmailId] = useState<number | null>(null);
     const [currentMailbox, setCurrentMailbox] = useState<string>('');
     const [emailDetailVisible, setEmailDetailVisible] = useState(false);
-    const [emailDetailContent, setEmailDetailContent] = useState<string>('');
-    const [emailDetailSubject, setEmailDetailSubject] = useState<string>('');
+    const [emailDetailContent, setEmailDetailContent] = useState('');
+    const [emailDetailSubject, setEmailDetailSubject] = useState('');
     const [emailEditLoading, setEmailEditLoading] = useState(false);
-    const [form] = Form.useForm();
-
-    // Group-related state
     const [groups, setGroups] = useState<EmailGroup[]>([]);
     const [groupModalVisible, setGroupModalVisible] = useState(false);
     const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
-    const [groupForm] = Form.useForm();
     const [assignGroupModalVisible, setAssignGroupModalVisible] = useState(false);
     const [assignTargetGroupId, setAssignTargetGroupId] = useState<number | undefined>(undefined);
     const latestListRequestIdRef = useRef(0);
     const latestMailboxRequestIdRef = useRef(0);
+    const [form] = Form.useForm();
+    const [groupForm] = Form.useForm();
 
     const toOptionalNumber = (value: unknown): number | undefined => {
         if (value === undefined || value === null || value === '') {
@@ -242,20 +253,31 @@ const EmailsPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         const currentRequestId = ++latestListRequestIdRef.current;
         setLoading(true);
-        const params: { page: number; pageSize: number; keyword: string; groupId?: number } = { page, pageSize, keyword: debouncedKeyword };
-        if (filterGroupId !== undefined) params.groupId = filterGroupId;
+
+        const params: { page: number; pageSize: number; keyword: string; groupId?: number } = {
+            page,
+            pageSize,
+            keyword: debouncedKeyword,
+        };
+
+        if (filterGroupId !== undefined) {
+            params.groupId = filterGroupId;
+        }
 
         const result = await requestData<EmailListResult>(
             () => emailApi.getList(params),
             '获取数据失败'
         );
+
         if (currentRequestId !== latestListRequestIdRef.current) {
             return;
         }
+
         if (result) {
             setData(result.list);
             setTotal(result.total);
         }
+
         setLoading(false);
     }, [debouncedKeyword, filterGroupId, page, pageSize]);
 
@@ -279,6 +301,11 @@ const EmailsPage: React.FC = () => {
         }, 0);
         return () => window.clearTimeout(timer);
     }, [fetchData]);
+
+    const refreshOverview = useCallback(() => {
+        void fetchData();
+        void fetchGroups();
+    }, [fetchData, fetchGroups]);
 
     const handleCreate = () => {
         setEditingId(null);
@@ -316,15 +343,14 @@ const EmailsPage: React.FC = () => {
             const res = await emailApi.delete(id);
             if (res.code === 200) {
                 message.success('删除成功');
-                fetchData();
-                fetchGroups();
+                refreshOverview();
             } else {
                 message.error(res.message);
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '删除失败'));
         }
-    }, [fetchData, fetchGroups]);
+    }, [refreshOverview]);
 
     const handleBatchDelete = async () => {
         if (selectedRowKeys.length === 0) {
@@ -337,8 +363,7 @@ const EmailsPage: React.FC = () => {
             if (res.code === 200) {
                 message.success(`成功删除 ${res.data.deleted} 个邮箱`);
                 setSelectedRowKeys([]);
-                fetchData();
-                fetchGroups();
+                refreshOverview();
             } else {
                 message.error(res.message);
             }
@@ -350,37 +375,34 @@ const EmailsPage: React.FC = () => {
     const handleSubmit = async () => {
         try {
             const values = await form.validateFields();
-            const normalizedGroupId =
-                values.groupId === null ? null : toOptionalNumber(values.groupId);
+            const normalizedGroupId = values.groupId === null ? null : toOptionalNumber(values.groupId);
 
             if (editingId) {
-                const submitData = {
+                const res = await emailApi.update(editingId, {
                     ...values,
                     groupId: normalizedGroupId ?? null,
-                };
-                const res = await emailApi.update(editingId, submitData);
+                });
                 if (res.code === 200) {
                     message.success('更新成功');
                     setModalVisible(false);
-                    fetchData();
-                    fetchGroups();
+                    refreshOverview();
                 } else {
                     message.error(res.message);
                 }
+                return;
+            }
+
+            const res = await emailApi.create({
+                ...values,
+                groupId: toOptionalNumber(values.groupId),
+            });
+
+            if (res.code === 200) {
+                message.success('创建成功');
+                setModalVisible(false);
+                refreshOverview();
             } else {
-                const submitData = {
-                    ...values,
-                    groupId: toOptionalNumber(values.groupId),
-                };
-                const res = await emailApi.create(submitData);
-                if (res.code === 200) {
-                    message.success('创建成功');
-                    setModalVisible(false);
-                    fetchData();
-                    fetchGroups();
-                } else {
-                    message.error(res.message);
-                }
+                message.error(res.message);
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '保存失败'));
@@ -394,18 +416,13 @@ const EmailsPage: React.FC = () => {
         }
 
         try {
-            const res = await emailApi.import(
-                importContent,
-                separator,
-                toOptionalNumber(importGroupId)
-            );
+            const res = await emailApi.import(importContent, separator, toOptionalNumber(importGroupId));
             if (res.code === 200) {
                 message.success(res.message);
                 setImportModalVisible(false);
                 setImportContent('');
                 setImportGroupId(undefined);
-                fetchData();
-                fetchGroups();
+                refreshOverview();
             } else {
                 message.error(res.message);
             }
@@ -423,14 +440,14 @@ const EmailsPage: React.FC = () => {
                 message.error(res.message || '导出失败');
                 return;
             }
-            const content = res.data?.content || '';
 
+            const content = res.data?.content || '';
             const blob = new Blob([content], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'email_accounts.txt';
-            a.click();
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = 'email_accounts.txt';
+            anchor.click();
             URL.revokeObjectURL(url);
 
             message.success('导出成功');
@@ -444,7 +461,6 @@ const EmailsPage: React.FC = () => {
             setMailList([]);
             return;
         }
-
         setMailLoading(true);
         const result = await requestData<{ messages: MailItem[] }>(
             () => emailApi.viewMails(emailId, mailbox),
@@ -539,9 +555,6 @@ const EmailsPage: React.FC = () => {
         setEmailDetailVisible(true);
     };
 
-    // ========================================
-    // Group CRUD handlers
-    // ========================================
     const handleCreateGroup = () => {
         setEditingGroupId(null);
         groupForm.resetFields();
@@ -564,13 +577,12 @@ const EmailsPage: React.FC = () => {
             const res = await groupApi.delete(id);
             if (res.code === 200) {
                 message.success('分组已删除');
-                fetchGroups();
-                fetchData();
+                refreshOverview();
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '删除失败'));
         }
-    }, [fetchData, fetchGroups]);
+    }, [refreshOverview]);
 
     const handleGroupSubmit = async () => {
         try {
@@ -580,15 +592,16 @@ const EmailsPage: React.FC = () => {
                 if (res.code === 200) {
                     message.success('分组已更新');
                     setGroupModalVisible(false);
-                    fetchGroups();
+                    refreshOverview();
                 }
-            } else {
-                const res = await groupApi.create(values);
-                if (res.code === 200) {
-                    message.success('分组已创建');
-                    setGroupModalVisible(false);
-                    fetchGroups();
-                }
+                return;
+            }
+
+            const res = await groupApi.create(values);
+            if (res.code === 200) {
+                message.success('分组已创建');
+                setGroupModalVisible(false);
+                refreshOverview();
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '分组保存失败'));
@@ -611,8 +624,7 @@ const EmailsPage: React.FC = () => {
                 setAssignGroupModalVisible(false);
                 setAssignTargetGroupId(undefined);
                 setSelectedRowKeys([]);
-                fetchData();
-                fetchGroups();
+                refreshOverview();
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '分配失败'));
@@ -624,106 +636,134 @@ const EmailsPage: React.FC = () => {
             message.warning('请先选择邮箱');
             return;
         }
-        // Find the groupIds of selected emails, remove from each group
-        const selectedEmails = data.filter((e: EmailAccount) => selectedRowKeys.includes(e.id));
-        const groupIds = [...new Set(selectedEmails.map((e: EmailAccount) => e.groupId).filter(Boolean))] as number[];
+
+        const selectedEmails = data.filter((item) => selectedRowKeys.includes(item.id));
+        const groupIds = [...new Set(selectedEmails.map((item) => item.groupId).filter(Boolean))] as number[];
 
         try {
-            for (const gid of groupIds) {
-                const emailIds = selectedEmails.filter((e: EmailAccount) => e.groupId === gid).map((e: EmailAccount) => e.id);
-                await groupApi.removeEmails(gid, emailIds);
+            for (const groupId of groupIds) {
+                const emailIds = selectedEmails
+                    .filter((item) => item.groupId === groupId)
+                    .map((item) => item.id);
+                await groupApi.removeEmails(groupId, emailIds);
             }
             message.success('已将选中邮箱移出分组');
             setSelectedRowKeys([]);
-            fetchData();
-            fetchGroups();
+            refreshOverview();
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '移出失败'));
         }
     };
 
-    // ========================================
-    // Email table columns
-    // ========================================
+    const groupedTotal = useMemo(
+        () => groups.reduce((sum, group) => sum + group.emailCount, 0),
+        [groups]
+    );
+    const ungroupedTotal = Math.max(total - groupedTotal, 0);
+    const currentPageErrorCount = useMemo(
+        () => data.filter((item) => item.status === 'ERROR').length,
+        [data]
+    );
+    const currentPageCheckedCount = useMemo(
+        () => data.filter((item) => Boolean(item.lastCheckAt)).length,
+        [data]
+    );
+    const currentPageDisabledCount = useMemo(
+        () => data.filter((item) => item.status === 'DISABLED').length,
+        [data]
+    );
+    const groupCoverage = total > 0 ? Math.round((groupedTotal / total) * 100) : 0;
+    const strategyCount = useMemo(
+        () => new Set(groups.map((group) => group.fetchStrategy)).size,
+        [groups]
+    );
+
     const columns: ColumnsType<EmailAccount> = useMemo(() => [
         {
             title: '邮箱',
             dataIndex: 'email',
             key: 'email',
             ellipsis: true,
+            render: (value: string, record: EmailAccount) => (
+                <div>
+                    <Text strong>{value}</Text>
+                    {record.errorMessage ? (
+                        <Tooltip title={record.errorMessage}>
+                            <Text type="danger" style={{ display: 'block', marginTop: 6 }}>
+                                {record.errorMessage}
+                            </Text>
+                        </Tooltip>
+                    ) : (
+                        <Text type="secondary" style={{ display: 'block', marginTop: 6 }}>
+                            {record.group ? `当前分组：${record.group.name}` : '当前未编入任何分组'}
+                        </Text>
+                    )}
+                </div>
+            ),
         },
         {
             title: '客户端 ID',
             dataIndex: 'clientId',
             key: 'clientId',
             ellipsis: true,
+            render: (value: string) => <Text className="gx-code-pill">{value}</Text>,
         },
         {
             title: '分组',
             dataIndex: 'group',
             key: 'group',
-            width: 120,
-            render: (group: EmailAccount['group']) =>
-                group ? <Tag color="blue">{group.name}</Tag> : <Tag>未分组</Tag>,
+            width: 140,
+            render: (group: EmailAccount['group']) => (
+                group ? <Tag color="processing">{group.name}</Tag> : <Tag>未分组</Tag>
+            ),
         },
         {
             title: '状态',
             dataIndex: 'status',
             key: 'status',
             width: 100,
-            render: (status: string) => {
-                const colors: Record<string, string> = {
-                    ACTIVE: 'green',
-                    ERROR: 'red',
-                    DISABLED: 'default',
-                };
-                const labels: Record<string, string> = {
-                    ACTIVE: '正常',
-                    ERROR: '异常',
-                    DISABLED: '禁用',
-                };
-                return <Tag color={colors[status]}>{labels[status]}</Tag>;
-            },
+            render: (status: EmailAccount['status']) => (
+                <Tag color={EMAIL_STATUS_META[status].color}>{EMAIL_STATUS_META[status].label}</Tag>
+            ),
         },
         {
             title: '最后检查',
             dataIndex: 'lastCheckAt',
             key: 'lastCheckAt',
             width: 160,
-            render: (val: string | null) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm') : '-'),
+            render: (value: string | null) => (
+                value ? dayjs(value).format('YYYY-MM-DD HH:mm') : <Text type="secondary">未执行</Text>
+            ),
         },
         {
             title: '创建时间',
             dataIndex: 'createdAt',
             key: 'createdAt',
             width: 160,
-            render: (val: string) => dayjs(val).format('YYYY-MM-DD HH:mm'),
+            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
         },
         {
             title: '操作',
             key: 'action',
             width: 180,
             render: (_: unknown, record: EmailAccount) => (
-                <Space>
-                    <Tooltip title="查看文件夹">
+                <Space size="small">
+                    <Tooltip title="查看邮件">
                         <Button
                             type="text"
                             icon={<MailOutlined />}
-                            onClick={() => handleOpenMails(record)}
+                            onClick={() => void handleOpenMails(record)}
                         />
                     </Tooltip>
                     <Tooltip title="编辑">
                         <Button
                             type="text"
                             icon={<EditOutlined />}
-                            onClick={() => handleEdit(record)}
+                            onClick={() => void handleEdit(record)}
                         />
                     </Tooltip>
                     <Tooltip title="删除">
-                        <Popconfirm
-                            title="确定要删除此邮箱吗？"
-                            onConfirm={() => handleDelete(record.id)}
-                        >
+                        <Popconfirm title="确定要删除此邮箱吗？" onConfirm={() => void handleDelete(record.id)}>
                             <Button type="text" danger icon={<DeleteOutlined />} />
                         </Popconfirm>
                     </Tooltip>
@@ -732,10 +772,66 @@ const EmailsPage: React.FC = () => {
         },
     ], [handleDelete, handleEdit, handleOpenMails]);
 
+    const groupColumns: ColumnsType<EmailGroup> = useMemo(() => [
+        {
+            title: '分组名称',
+            dataIndex: 'name',
+            key: 'name',
+            render: (name: string, record: EmailGroup) => (
+                <div>
+                    <Tag color="processing">{name}</Tag>
+                    {record.description && (
+                        <Text type="secondary" style={{ display: 'block', marginTop: 6 }}>
+                            {record.description}
+                        </Text>
+                    )}
+                </div>
+            ),
+        },
+        {
+            title: '拉取策略',
+            dataIndex: 'fetchStrategy',
+            key: 'fetchStrategy',
+            width: 180,
+            render: (value: MailFetchStrategy) => <Tag color="purple">{MAIL_FETCH_STRATEGY_LABELS[value]}</Tag>,
+        },
+        {
+            title: '邮箱数',
+            dataIndex: 'emailCount',
+            key: 'emailCount',
+            width: 120,
+            render: (value: number) => <Text strong>{value}</Text>,
+        },
+        {
+            title: '创建时间',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 180,
+            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+        },
+        {
+            title: '操作',
+            key: 'action',
+            width: 150,
+            render: (_: unknown, record: EmailGroup) => (
+                <Space size="small">
+                    <Button type="text" icon={<EditOutlined />} onClick={() => handleEditGroup(record)} />
+                    <Popconfirm
+                        title="删除分组后，组内邮箱将变为未分组，确认继续吗？"
+                        onConfirm={() => void handleDeleteGroup(record.id)}
+                    >
+                        <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                </Space>
+            ),
+        },
+    ], [handleDeleteGroup, handleEditGroup]);
+
     const rowSelection = useMemo(
         () => ({
             selectedRowKeys,
             onChange: setSelectedRowKeys,
+            preserveSelectedRowKeys: true,
         }),
         [selectedRowKeys]
     );
@@ -746,6 +842,7 @@ const EmailsPage: React.FC = () => {
             pageSize,
             total,
             showSizeChanger: true,
+            showQuickJumper: true,
             showTotal: (count: number) => `共 ${count} 条`,
             onChange: (currentPage: number, currentPageSize: number) => {
                 setPage(currentPage);
@@ -779,328 +876,419 @@ const EmailsPage: React.FC = () => {
 
     const emailDetailSrcDoc = useMemo(
         () => `
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta charset="utf-8">
-                            <style>
-                                body { 
-                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                                    font-size: 14px;
-                                    line-height: 1.6;
-                                    color: #333;
-                                    margin: 0;
-                                    padding: 16px;
-                                    background: #fafafa;
-                                }
-                                img { max-width: 100%; height: auto; }
-                                a { color: #1890ff; }
-                            </style>
-                        </head>
-                        <body>${emailDetailContent}</body>
-                        </html>
-                    `,
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body {
+                        font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                        font-size: 14px;
+                        line-height: 1.7;
+                        color: #0f172a;
+                        margin: 0;
+                        padding: 20px;
+                        background: #f8fcff;
+                    }
+                    img { max-width: 100%; height: auto; }
+                    a { color: #0369a1; }
+                </style>
+            </head>
+            <body>${emailDetailContent}</body>
+            </html>
+        `,
         [emailDetailContent]
     );
 
     const groupFilterOptions = useMemo(
-        () =>
-            groups.map((group: EmailGroup) => ({
-                value: group.id,
-                label: `${group.name} (${group.emailCount})`,
-            })),
+        () => groups.map((group) => ({
+            value: group.id,
+            label: `${group.name} (${group.emailCount})`,
+        })),
         [groups]
     );
 
     const groupOptions = useMemo(
-        () =>
-            groups.map((group: EmailGroup) => ({
-                value: group.id,
-                label: group.name,
-            })),
+        () => groups.map((group) => ({
+            value: group.id,
+            label: group.name,
+        })),
         [groups]
     );
 
-    // ========================================
-    // Group table columns
-    // ========================================
-    const groupColumns: ColumnsType<EmailGroup> = useMemo(() => [
-        {
-            title: '分组名称',
-            dataIndex: 'name',
-            key: 'name',
-            render: (name: string) => <Tag color="blue">{name}</Tag>,
-        },
-        {
-            title: '描述',
-            dataIndex: 'description',
-            key: 'description',
-            render: (val: string | null) => val || '-',
-        },
-        {
-            title: '拉取策略',
-            dataIndex: 'fetchStrategy',
-            key: 'fetchStrategy',
-            width: 190,
-            render: (value: MailFetchStrategy) => <Tag color="purple">{MAIL_FETCH_STRATEGY_LABELS[value]}</Tag>,
-        },
-        {
-            title: '邮箱数',
-            dataIndex: 'emailCount',
-            key: 'emailCount',
-            width: 100,
-        },
-        {
-            title: '创建时间',
-            dataIndex: 'createdAt',
-            key: 'createdAt',
-            width: 180,
-            render: (val: string) => dayjs(val).format('YYYY-MM-DD HH:mm'),
-        },
-        {
-            title: '操作',
-            key: 'action',
-            width: 160,
-            render: (_: unknown, record: EmailGroup) => (
-                <Space>
-                    <Button
-                        type="text"
-                        icon={<EditOutlined />}
-                        onClick={() => handleEditGroup(record)}
-                    />
-                    <Popconfirm
-                        title="删除分组后，组内邮箱将变为「未分组」。确认？"
-                        onConfirm={() => handleDeleteGroup(record.id)}
-                    >
-                        <Button type="text" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
-                </Space>
-            ),
-        },
-    ], [handleDeleteGroup, handleEditGroup]);
-
-    // ========================================
-    // Render
-    // ========================================
     return (
-        <div>
-            <Title level={4} style={{ margin: '0 0 16px' }}>邮箱管理</Title>
+        <div className="gx-ops-shell">
+            <PageHeader
+                eyebrow="Mailbox Operations"
+                title="邮箱管理"
+                subtitle="把账号维护、分组策略、批量导入和收件箱查看折叠到一个更适合高频运营的控制台里。"
+                extra={<Button icon={<ReloadOutlined />} onClick={refreshOverview}>刷新数据</Button>}
+            />
+
+            <Card className="gx-hero-card gx-panel-card" bordered={false}>
+                <Row gutter={[24, 24]} align="middle">
+                    <Col xs={24} xl={14}>
+                        <Text className="gx-hero-card__eyebrow">Mailbox Console</Text>
+                        <Title level={2} className="gx-hero-card__title">
+                            分组调度、批量导入和邮箱排查收敛到同一页。
+                        </Title>
+                        <Paragraph className="gx-hero-card__subtitle">
+                            这页现在更偏向操作控制台而不是传统列表页。筛选、批量动作、分组编排和邮件查看保持在一个连续上下文里，减少运维切换成本。
+                        </Paragraph>
+                        <Space wrap className="gx-hero-card__actions">
+                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>添加邮箱</Button>
+                            <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>批量导入</Button>
+                        </Space>
+                    </Col>
+                    <Col xs={24} xl={10}>
+                        <div className="gx-hero-card__metrics">
+                            <div className="gx-hero-signal">
+                                <Text className="gx-hero-signal__label">Group Coverage</Text>
+                                <Text className="gx-hero-signal__value">{groupCoverage}%</Text>
+                                <Text className="gx-hero-signal__description">
+                                    {groupedTotal} 个邮箱已经进入分组策略，剩余 {ungroupedTotal} 个仍可继续整理编排。
+                                </Text>
+                            </div>
+                            <div className="gx-hero-signal__grid">
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">当前页已检查</Text>
+                                    <Text className="gx-hero-mini__value">{currentPageCheckedCount}</Text>
+                                </div>
+                                <div className="gx-hero-mini">
+                                    <Text className="gx-hero-mini__label">当前页异常</Text>
+                                    <Text className="gx-hero-mini__value">{currentPageErrorCount}</Text>
+                                </div>
+                            </div>
+                        </div>
+                    </Col>
+                </Row>
+            </Card>
+
+            <Row gutter={[16, 16]}>
+                <Col xs={12} md={6}>
+                    <StatCard title="托管邮箱" value={total} icon={<MailOutlined />} iconBgColor="#0369A1" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="已纳入分组" value={groupedTotal} suffix={`/ ${total || 0}`} icon={<GroupOutlined />} iconBgColor="#0F766E" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="分组数量" value={groups.length} icon={<InboxOutlined />} iconBgColor="#0EA5E9" />
+                </Col>
+                <Col xs={12} md={6}>
+                    <StatCard title="当前选择" value={selectedRowKeys.length} icon={<SyncOutlined />} iconBgColor="#f59e0b" />
+                </Col>
+            </Row>
+
             <Tabs
                 defaultActiveKey="emails"
                 animated={false}
                 destroyInactiveTabPane
+                className="gx-ops-tabs"
                 items={[
                     {
                         key: 'emails',
-                        label: '邮箱列表',
+                        label: (
+                            <span className="gx-ops-tab-label">
+                                邮箱列表
+                                <Tag className="gx-ops-tab-count">{total}</Tag>
+                            </span>
+                        ),
                         children: (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-                                    <Space wrap>
+                            <Card className="gx-panel-card gx-data-table" bordered={false}>
+                                <div className="gx-ops-toolbar">
+                                    <div className="gx-ops-toolbar__cluster">
                                         <Input
-                                            placeholder="搜索邮箱"
+                                            allowClear
+                                            placeholder="搜索邮箱地址"
                                             prefix={<SearchOutlined />}
                                             value={keyword}
-                                            onChange={(e) => setKeyword(e.target.value)}
-                                            style={{ width: 200 }}
-                                            allowClear
+                                            onChange={(event) => setKeyword(event.target.value)}
+                                            style={{ width: 260, maxWidth: '100%' }}
                                         />
                                         <Select
-                                            placeholder="按分组筛选"
                                             allowClear
-                                            style={{ width: 160 }}
+                                            placeholder="按分组筛选"
                                             value={filterGroupId}
                                             options={groupFilterOptions}
-                                            onChange={(val: number | string | undefined) => {
-                                                setFilterGroupId(toOptionalNumber(val));
+                                            onChange={(value: number | string | undefined) => {
+                                                setFilterGroupId(toOptionalNumber(value));
                                                 setPage(1);
                                             }}
+                                            style={{ width: 220, maxWidth: '100%' }}
                                         />
-                                    </Space>
-                                    <Space wrap>
-                                        <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>
-                                            导入
-                                        </Button>
-                                        <Button icon={<DownloadOutlined />} onClick={handleExport}>
-                                            导出
-                                        </Button>
-                                        {selectedRowKeys.length > 0 && (
-                                            <>
-                                                <Button icon={<GroupOutlined />} onClick={() => setAssignGroupModalVisible(true)}>
-                                                    分配分组 ({selectedRowKeys.length})
-                                                </Button>
-                                                <Button onClick={handleBatchRemoveGroup}>
-                                                    移出分组 ({selectedRowKeys.length})
-                                                </Button>
-                                                <Popconfirm
-                                                    title={`确定要删除选中的 ${selectedRowKeys.length} 个邮箱吗？`}
-                                                    onConfirm={handleBatchDelete}
-                                                >
-                                                    <Button danger>批量删除 ({selectedRowKeys.length})</Button>
-                                                </Popconfirm>
-                                            </>
+                                        {(keyword || filterGroupId !== undefined) && (
+                                            <Button
+                                                onClick={() => {
+                                                    setKeyword('');
+                                                    setFilterGroupId(undefined);
+                                                    setPage(1);
+                                                }}
+                                            >
+                                                清空筛选
+                                            </Button>
                                         )}
-                                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                                            添加邮箱
-                                        </Button>
-                                    </Space>
+                                    </div>
+                                    <div className="gx-ops-toolbar__cluster gx-ops-toolbar__cluster--actions">
+                                        <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>导入</Button>
+                                        <Button icon={<DownloadOutlined />} onClick={() => void handleExport()}>导出</Button>
+                                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>添加邮箱</Button>
+                                    </div>
+                                </div>
+
+                                {selectedRowKeys.length > 0 && (
+                                    <div className="gx-ops-selection">
+                                        <div className="gx-ops-selection__copy">
+                                            <Text className="gx-ops-selection__label">Batch Actions</Text>
+                                            <Text className="gx-ops-selection__text">
+                                                已选中 {selectedRowKeys.length} 个邮箱，可以继续做分组编排或清理操作。
+                                            </Text>
+                                        </div>
+                                        <Space wrap>
+                                            <Button icon={<GroupOutlined />} onClick={() => setAssignGroupModalVisible(true)}>分配分组</Button>
+                                            <Button onClick={() => void handleBatchRemoveGroup()}>移出分组</Button>
+                                            <Popconfirm
+                                                title={`确定要删除选中的 ${selectedRowKeys.length} 个邮箱吗？`}
+                                                onConfirm={() => void handleBatchDelete()}
+                                            >
+                                                <Button danger>批量删除</Button>
+                                            </Popconfirm>
+                                        </Space>
+                                    </div>
+                                )}
+
+                                <div className={`gx-ops-note${currentPageErrorCount > 0 ? ' gx-ops-note--warning' : ''}`} style={{ marginBottom: 18 }}>
+                                    <Text className="gx-ops-note__label">Page Health</Text>
+                                    <Text className="gx-ops-note__text">
+                                        当前页有 {currentPageErrorCount} 个异常邮箱、{currentPageDisabledCount} 个禁用邮箱，便于你先处理高风险项。
+                                    </Text>
                                 </div>
 
                                 <Table
+                                    className="gx-dashboard-table"
                                     columns={columns}
                                     dataSource={data}
                                     rowKey="id"
                                     loading={loading}
                                     rowSelection={rowSelection}
                                     pagination={tablePagination}
-                                    virtual
                                     scroll={{ y: 560, x: 1200 }}
+                                    locale={{ emptyText: '暂无邮箱数据' }}
                                 />
-                            </>
+                            </Card>
                         ),
                     },
                     {
                         key: 'groups',
-                        label: '邮箱分组',
+                        label: (
+                            <span className="gx-ops-tab-label">
+                                邮箱分组
+                                <Tag className="gx-ops-tab-count">{groups.length}</Tag>
+                            </span>
+                        ),
                         children: (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateGroup}>
-                                        创建分组
-                                    </Button>
+                            <Card className="gx-panel-card gx-data-table" bordered={false}>
+                                <div className="gx-ops-toolbar">
+                                    <div className="gx-ops-toolbar__cluster">
+                                        <div className="gx-ops-note" style={{ width: '100%' }}>
+                                            <Text className="gx-ops-note__label">Routing Summary</Text>
+                                            <Text className="gx-ops-note__text">
+                                                分组现在承担的是邮箱池组织层。你可以按渠道、环境或业务线定义拉取策略，再把邮箱批量编排进去。
+                                            </Text>
+                                            <div className="gx-ops-note__grid">
+                                                <div className="gx-ops-note__metric">
+                                                    <Text className="gx-ops-note__metric-label">已分组邮箱</Text>
+                                                    <Text className="gx-ops-note__metric-value">{groupedTotal}</Text>
+                                                </div>
+                                                <div className="gx-ops-note__metric">
+                                                    <Text className="gx-ops-note__metric-label">未分组邮箱</Text>
+                                                    <Text className="gx-ops-note__metric-value">{ungroupedTotal}</Text>
+                                                </div>
+                                                <div className="gx-ops-note__metric">
+                                                    <Text className="gx-ops-note__metric-label">策略种类</Text>
+                                                    <Text className="gx-ops-note__metric-value">{strategyCount}</Text>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="gx-ops-toolbar__cluster gx-ops-toolbar__cluster--actions">
+                                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateGroup}>创建分组</Button>
+                                    </div>
                                 </div>
+
                                 <Table
+                                    className="gx-dashboard-table"
                                     columns={groupColumns}
                                     dataSource={groups}
                                     rowKey="id"
                                     pagination={false}
+                                    locale={{ emptyText: '暂无分组数据' }}
                                 />
-                            </>
+                            </Card>
                         ),
                     },
                 ]}
             />
 
-            {/* 添加/编辑邮箱 Modal */}
             <Modal
-                title={editingId ? '编辑邮箱' : '添加邮箱'}
+                className="gx-console-modal"
+                title={editingId ? '编辑邮箱账户' : '添加邮箱账户'}
                 open={modalVisible}
-                onOk={handleSubmit}
+                onOk={() => void handleSubmit()}
                 onCancel={() => setModalVisible(false)}
+                okText={editingId ? '保存更新' : '创建邮箱'}
+                cancelText="取消"
                 destroyOnClose
-                width={600}
+                width={720}
             >
                 <Spin spinning={emailEditLoading}>
-                    <Form form={form} layout="vertical">
-                    <Form.Item name="email" label="邮箱地址" rules={[{ required: true, message: '请输入邮箱地址' }, { type: 'email', message: '请输入有效的邮箱地址' }]}>
-                        <Input placeholder="example@outlook.com" />
-                    </Form.Item>
-                    <Form.Item name="password" label="密码">
-                        <Input.Password placeholder="可选" />
-                    </Form.Item>
-
-                    <Form.Item
-                        name="clientId"
-                        label="客户端 ID"
-                        rules={[{ required: true, message: '请输入客户端 ID' }]}
-                    >
-                        <Input placeholder="Azure AD 应用程序 ID" />
-                    </Form.Item>
-                    <Form.Item
-                        name="refreshToken"
-                        label="刷新令牌"
-                        rules={[{ required: !editingId, message: '请输入刷新令牌' }]}
-                    >
-                        <TextArea rows={4} placeholder="OAuth2 Refresh Token" />
-                    </Form.Item>
-                    <Form.Item name="groupId" label="所属分组">
-                        <Select placeholder="可选：选择分组" allowClear options={groupOptions} />
-                    </Form.Item>
-                    <Form.Item name="status" label="状态" initialValue="ACTIVE">
-                        <Select>
-                            <Select.Option value="ACTIVE">正常</Select.Option>
-                            <Select.Option value="DISABLED">禁用</Select.Option>
-                        </Select>
-                    </Form.Item>
-                    </Form>
+                    <div className="gx-modal-stack">
+                        <div className="gx-modal-section">
+                            <Text className="gx-modal-section__label">Credential Setup</Text>
+                            <Text className="gx-modal-section__text">
+                                录入邮箱凭据后，可以直接绑定到现有分组。编辑时默认保留现有凭据，只更新你调整的字段。
+                            </Text>
+                        </div>
+                        <Form form={form} layout="vertical">
+                            <Row gutter={[16, 0]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        name="email"
+                                        label="邮箱地址"
+                                        rules={[
+                                            { required: true, message: '请输入邮箱地址' },
+                                            { type: 'email', message: '请输入有效的邮箱地址' },
+                                        ]}
+                                    >
+                                        <Input placeholder="example@outlook.com" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="password" label="密码">
+                                        <Input.Password placeholder="可选" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        name="clientId"
+                                        label="客户端 ID"
+                                        rules={[{ required: true, message: '请输入客户端 ID' }]}
+                                    >
+                                        <Input placeholder="Azure AD 应用程序 ID" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="groupId" label="所属分组">
+                                        <Select placeholder="可选：选择分组" allowClear options={groupOptions} />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24}>
+                                    <Form.Item
+                                        name="refreshToken"
+                                        label="刷新令牌"
+                                        rules={[{ required: !editingId, message: '请输入刷新令牌' }]}
+                                    >
+                                        <TextArea rows={4} placeholder="OAuth2 Refresh Token" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="status" label="状态" initialValue="ACTIVE">
+                                        <Select
+                                            options={[
+                                                { value: 'ACTIVE', label: '正常' },
+                                                { value: 'DISABLED', label: '禁用' },
+                                            ]}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                        </Form>
+                    </div>
                 </Spin>
             </Modal>
 
-            {/* 批量导入 Modal */}
             <Modal
+                className="gx-console-modal"
                 title="批量导入邮箱"
                 open={importModalVisible}
-                onOk={handleImport}
+                onOk={() => void handleImport()}
                 onCancel={() => setImportModalVisible(false)}
+                okText="开始导入"
+                cancelText="取消"
                 destroyOnClose
-                width={700}
+                width={760}
             >
-                <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <div>
-                        <Text type="secondary">
-                            上传文件或粘贴内容。支持多种格式，将尝试自动解析。
-                            <br />
-                            推荐格式：邮箱{separator}密码{separator}客户端ID{separator}刷新令牌
+                <div className="gx-modal-stack">
+                    <div className="gx-modal-section">
+                        <Text className="gx-modal-section__label">Import Rules</Text>
+                        <Text className="gx-modal-section__text">
+                            支持直接上传文本文件或粘贴内容。推荐格式为：邮箱{separator}密码{separator}客户端 ID{separator}刷新令牌。
                         </Text>
                     </div>
-                    <Input
-                        addonBefore="分隔符"
-                        value={separator}
-                        onChange={(e) => setSeparator(e.target.value)}
-                        style={{ width: 200 }}
-                    />
-                    <Select
-                        placeholder="导入到分组（可选）"
-                        allowClear
-                        value={importGroupId}
-                        options={groupOptions}
-                        onChange={(value: number | string | undefined) => setImportGroupId(toOptionalNumber(value))}
-                        style={{ width: 260 }}
-                    />
-                    <Dragger
-                        beforeUpload={(file) => {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                const fileContent = e.target?.result as string;
-                                if (fileContent) {
-                                    const lines = fileContent.split(/\r?\n/).filter((line: string) => line.trim());
-                                    const processedLines = lines.map((line: string) => {
-                                        const parts = line.split(separator);
-                                        if (parts.length >= 5) {
-                                            return `${parts[0]}${separator}${parts[1]}${separator}${parts[4]}`;
+                    <div className="gx-modal-section">
+                        <Row gutter={[16, 16]}>
+                            <Col xs={24} md={10}>
+                                <Input addonBefore="分隔符" value={separator} onChange={(event) => setSeparator(event.target.value)} />
+                            </Col>
+                            <Col xs={24} md={14}>
+                                <Select
+                                    allowClear
+                                    placeholder="导入到分组（可选）"
+                                    value={importGroupId}
+                                    options={groupOptions}
+                                    onChange={(value: number | string | undefined) => setImportGroupId(toOptionalNumber(value))}
+                                />
+                            </Col>
+                        </Row>
+                        <div style={{ marginTop: 16 }}>
+                            <Dragger
+                                beforeUpload={(file) => {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                        const fileContent = event.target?.result as string;
+                                        if (!fileContent) {
+                                            return;
                                         }
-                                        return line;
-                                    });
 
-                                    setImportContent(processedLines.join('\n'));
-                                    message.success(`文件读取成功，已解析 ${lines.length} 行数据`);
-                                }
-                            };
-                            reader.readAsText(file);
-                            return false;
-                        }}
-                        showUploadList={false}
-                        maxCount={1}
-                        accept=".txt,.csv"
-                    >
-                        <p className="ant-upload-drag-icon">
-                            <InboxOutlined />
-                        </p>
-                        <p className="ant-upload-text">点击或拖拽文件到此区域</p>
-                        <p className="ant-upload-hint">支持 .txt 或 .csv 文件</p>
-                    </Dragger>
-                    <TextArea
-                        rows={12}
-                        value={importContent}
-                        onChange={(e) => setImportContent(e.target.value)}
-                        placeholder={`example@outlook.com${separator}client_id${separator}refresh_token`}
-                    />
-                </Space>
+                                        const lines = fileContent.split(/\r?\n/).filter((line) => line.trim());
+                                        const processedLines = lines.map((line) => {
+                                            const parts = line.split(separator);
+                                            if (parts.length >= 5) {
+                                                return `${parts[0]}${separator}${parts[1]}${separator}${parts[4]}`;
+                                            }
+                                            return line;
+                                        });
+
+                                        setImportContent(processedLines.join('\n'));
+                                        message.success(`文件读取成功，已解析 ${lines.length} 行数据`);
+                                    };
+                                    reader.readAsText(file);
+                                    return false;
+                                }}
+                                showUploadList={false}
+                                maxCount={1}
+                                accept=".txt,.csv"
+                            >
+                                <p className="ant-upload-drag-icon">
+                                    <InboxOutlined />
+                                </p>
+                                <p className="ant-upload-text">点击或拖拽文件到此区域</p>
+                                <p className="ant-upload-hint">支持 .txt 或 .csv 文件</p>
+                            </Dragger>
+                        </div>
+                        <TextArea
+                            rows={12}
+                            value={importContent}
+                            onChange={(event) => setImportContent(event.target.value)}
+                            placeholder={`example@outlook.com${separator}client_id${separator}refresh_token`}
+                            style={{ marginTop: 16 }}
+                        />
+                    </div>
+                </div>
             </Modal>
 
-            {/* 邮件列表 Modal */}
             {mailModalVisible && (
                 <Modal
+                    className="gx-console-modal"
                     title={`${currentEmail} · ${currentMailboxLabel}`}
                     open={mailModalVisible}
                     onCancel={() => {
@@ -1115,156 +1303,189 @@ const EmailsPage: React.FC = () => {
                     }}
                     footer={null}
                     destroyOnClose
-                    width={1000}
-                    styles={{ body: { padding: '16px 24px' } }}
+                    width={1040}
                 >
-                    <Space wrap style={{ marginBottom: 16 }}>
-                        <Select
-                            showSearch
-                            placeholder={mailboxesLoading ? '加载文件夹中...' : '选择文件夹'}
-                            value={currentMailbox || undefined}
-                            options={mailboxOptions}
-                            loading={mailboxesLoading}
-                            disabled={mailboxesLoading || mailboxOptions.length === 0}
-                            optionFilterProp="label"
-                            style={{ width: 320 }}
-                            onChange={(value: string) => {
-                                void handleMailboxChange(value);
-                            }}
-                        />
-                        <Button
-                            type="primary"
-                            onClick={handleRefreshMails}
-                            loading={mailLoading}
-                            disabled={!currentMailbox || mailboxesLoading}
-                        >
-                            收取新邮件
-                        </Button>
-                        <Popconfirm
-                            title={`确定要清空 ${currentMailboxLabel} 的所有邮件吗？`}
-                            onConfirm={handleClearMailbox}
-                        >
-                            <Button danger disabled={!currentMailbox || mailboxesLoading}>清空</Button>
-                        </Popconfirm>
-                        <span style={{ marginLeft: 16, color: '#888' }}>
-                            共 {mailList.length} 封邮件
-                        </span>
-                    </Space>
-                    <List
-                        loading={mailLoading || mailboxesLoading}
-                        dataSource={mailList}
-                        itemLayout="horizontal"
-                        pagination={{
-                            pageSize: 10,
-                            showSizeChanger: true,
-                            showQuickJumper: true,
-                            showTotal: (total: number) => `共 ${total} 条`,
-                            style: { marginTop: 16 },
-                        }}
-                        style={{ maxHeight: 450, overflow: 'auto' }}
-                        renderItem={(item: MailItem) => (
-                            <List.Item
-                                key={item.id}
-                                actions={[
-                                    <Button
-                                        type="primary"
-                                        size="small"
-                                        onClick={() => handleViewEmailDetail(item)}
-                                    >
-                                        查看
-                                    </Button>,
-                                ]}
-                            >
-                                <List.Item.Meta
-                                    title={
-                                        <Typography.Text ellipsis style={{ maxWidth: 600 }}>
-                                            {item.subject || '(无主题)'}
-                                        </Typography.Text>
-                                    }
-                                    description={
-                                        <Space size="large">
-                                            <span style={{ color: '#1890ff' }}>{item.from || '未知发件人'}</span>
-                                            <span style={{ color: '#999' }}>
-                                                {item.date ? dayjs(item.date).format('YYYY-MM-DD HH:mm') : '-'}
-                                            </span>
-                                        </Space>
-                                    }
+                    <div className="gx-modal-stack">
+                        <div className="gx-ops-selection" style={{ marginBottom: 0 }}>
+                            <div className="gx-ops-selection__copy">
+                                <Text className="gx-ops-selection__label">Mailbox Reader</Text>
+                                <Text className="gx-ops-selection__text">
+                                    当前支持切换邮箱文件夹，已加载 {mailList.length} 封邮件，可直接查看正文或清空当前文件夹。
+                                </Text>
+                            </div>
+                            <Space wrap>
+                                <Select
+                                    showSearch
+                                    placeholder={mailboxesLoading ? '加载文件夹中...' : '选择文件夹'}
+                                    value={currentMailbox || undefined}
+                                    options={mailboxOptions}
+                                    loading={mailboxesLoading}
+                                    disabled={mailboxesLoading || mailboxOptions.length === 0}
+                                    optionFilterProp="label"
+                                    style={{ width: 320, maxWidth: '100%' }}
+                                    onChange={(value: string) => {
+                                        void handleMailboxChange(value);
+                                    }}
                                 />
-                            </List.Item>
-                        )}
-                    />
+                                <Button
+                                    type="primary"
+                                    onClick={() => void handleRefreshMails()}
+                                    loading={mailLoading}
+                                    disabled={!currentMailbox || mailboxesLoading}
+                                >
+                                    收取新邮件
+                                </Button>
+                                <Popconfirm
+                                    title={`确定要清空 ${currentMailboxLabel} 的所有邮件吗？`}
+                                    onConfirm={() => void handleClearMailbox()}
+                                >
+                                    <Button danger disabled={!currentMailbox || mailboxesLoading}>清空邮箱</Button>
+                                </Popconfirm>
+                            </Space>
+                        </div>
+                        <List
+                            className="gx-data-list"
+                            loading={mailLoading || mailboxesLoading}
+                            dataSource={mailList}
+                            itemLayout="horizontal"
+                            pagination={{
+                                pageSize: 10,
+                                showSizeChanger: true,
+                                showQuickJumper: true,
+                                showTotal: (count: number) => `共 ${count} 条`,
+                                style: { marginTop: 16 },
+                            }}
+                            renderItem={(item) => (
+                                <List.Item
+                                    key={item.id}
+                                    actions={[
+                                        <Button key={item.id} type="primary" size="small" onClick={() => handleViewEmailDetail(item)}>
+                                            查看正文
+                                        </Button>,
+                                    ]}
+                                >
+                                    <List.Item.Meta
+                                        title={
+                                            <Typography.Text ellipsis style={{ maxWidth: 620 }}>
+                                                {item.subject || '（无主题）'}
+                                            </Typography.Text>
+                                        }
+                                        description={(
+                                            <Space size="large" wrap>
+                                                <Text style={{ color: '#0369a1' }}>{item.from || '未知发件人'}</Text>
+                                                <Text type="secondary">
+                                                    {item.date ? dayjs(item.date).format('YYYY-MM-DD HH:mm') : '-'}
+                                                </Text>
+                                            </Space>
+                                        )}
+                                    />
+                                </List.Item>
+                            )}
+                        />
+                    </div>
                 </Modal>
             )}
 
-            {/* 邮件详情 Modal */}
             {emailDetailVisible && (
                 <Modal
+                    className="gx-console-modal"
                     title={emailDetailSubject}
                     open={emailDetailVisible}
                     onCancel={() => setEmailDetailVisible(false)}
                     footer={null}
                     destroyOnClose
-                    width={900}
-                    styles={{ body: { padding: '16px 24px' } }}
+                    width={960}
                 >
-                    <iframe
-                        title="email-content"
-                        sandbox="allow-same-origin"
-                        srcDoc={emailDetailSrcDoc}
-                        style={{
-                            width: '100%',
-                            height: 'calc(100vh - 300px)',
-                            border: '1px solid #eee',
-                            borderRadius: '8px',
-                            backgroundColor: '#fafafa',
-                        }}
-                    />
+                    <div className="gx-modal-stack">
+                        <div className="gx-modal-section">
+                            <Text className="gx-modal-section__label">Rendered Message</Text>
+                            <Text className="gx-modal-section__text">
+                                当前内容按邮件原始 HTML 或文本正文渲染，适合快速核查验证码、发件人和正文结构。
+                            </Text>
+                        </div>
+                        <iframe
+                            title="email-content"
+                            sandbox="allow-same-origin"
+                            srcDoc={emailDetailSrcDoc}
+                            style={{
+                                width: '100%',
+                                height: 'calc(100vh - 320px)',
+                                border: '1px solid rgba(125, 211, 252, 0.18)',
+                                borderRadius: '22px',
+                                backgroundColor: '#f8fcff',
+                            }}
+                        />
+                    </div>
                 </Modal>
             )}
 
-            {/* 创建/编辑分组 Modal */}
             <Modal
+                className="gx-console-modal"
                 title={editingGroupId ? '编辑分组' : '创建分组'}
                 open={groupModalVisible}
-                onOk={handleGroupSubmit}
+                onOk={() => void handleGroupSubmit()}
                 onCancel={() => setGroupModalVisible(false)}
+                okText={editingGroupId ? '保存分组' : '创建分组'}
+                cancelText="取消"
+                destroyOnClose
+                width={520}
+            >
+                <div className="gx-modal-stack">
+                    <div className="gx-modal-section">
+                        <Text className="gx-modal-section__label">Strategy Binding</Text>
+                        <Text className="gx-modal-section__text">
+                            分组不仅用于归类，还直接决定邮箱拉取策略，适合按渠道、环境或业务线拆分。
+                        </Text>
+                    </div>
+                    <Form form={groupForm} layout="vertical">
+                        <Form.Item name="name" label="分组名称" rules={[{ required: true, message: '请输入分组名称' }]}>
+                            <Input placeholder="例如：aws、discord" />
+                        </Form.Item>
+                        <Form.Item name="description" label="描述">
+                            <Input placeholder="可选描述" />
+                        </Form.Item>
+                        <Form.Item
+                            name="fetchStrategy"
+                            label="邮件拉取策略"
+                            rules={[{ required: true, message: '请选择拉取策略' }]}
+                        >
+                            <Select
+                                options={MAIL_FETCH_STRATEGY_OPTIONS.map((option) => ({
+                                    value: option.value,
+                                    label: option.label,
+                                }))}
+                            />
+                        </Form.Item>
+                    </Form>
+                </div>
+            </Modal>
+
+            <Modal
+                className="gx-console-modal"
+                title="分配邮箱到分组"
+                open={assignGroupModalVisible}
+                onOk={() => void handleBatchAssignGroup()}
+                onCancel={() => setAssignGroupModalVisible(false)}
+                okText="确认分配"
+                cancelText="取消"
                 destroyOnClose
                 width={460}
             >
-                <Form form={groupForm} layout="vertical">
-                    <Form.Item name="name" label="分组名称" rules={[{ required: true, message: '请输入分组名称' }]}>
-                        <Input placeholder="例如：aws、discord" />
-                    </Form.Item>
-                    <Form.Item name="description" label="描述">
-                        <Input placeholder="可选描述" />
-                    </Form.Item>
-                    <Form.Item
-                        name="fetchStrategy"
-                        label="邮件拉取策略"
-                        rules={[{ required: true, message: '请选择拉取策略' }]}
-                    >
-                        <Select options={MAIL_FETCH_STRATEGY_OPTIONS.map((option) => ({ value: option.value, label: option.label }))} />
-                    </Form.Item>
-                </Form>
-            </Modal>
-
-            {/* 批量分配分组 Modal */}
-            <Modal
-                title="分配邮箱到分组"
-                open={assignGroupModalVisible}
-                onOk={handleBatchAssignGroup}
-                onCancel={() => setAssignGroupModalVisible(false)}
-                destroyOnClose
-                width={400}
-            >
-                <p>已选择 {selectedRowKeys.length} 个邮箱</p>
-                <Select
-                    placeholder="选择目标分组"
-                    style={{ width: '100%' }}
-                    value={assignTargetGroupId}
-                    options={groupOptions}
-                    onChange={setAssignTargetGroupId}
-                />
+                <div className="gx-modal-stack">
+                    <div className="gx-modal-section">
+                        <Text className="gx-modal-section__label">Selection Scope</Text>
+                        <Text className="gx-modal-section__text">
+                            已选择 {selectedRowKeys.length} 个邮箱。确认目标分组后，会一次性完成归档和后续策略绑定。
+                        </Text>
+                    </div>
+                    <Select
+                        placeholder="选择目标分组"
+                        value={assignTargetGroupId}
+                        options={groupOptions}
+                        onChange={(value) => setAssignTargetGroupId(value)}
+                        style={{ width: '100%' }}
+                    />
+                </div>
             </Modal>
         </div>
     );
